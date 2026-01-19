@@ -8,44 +8,47 @@ find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 Sql)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
-# Явно добавляем файлы
 qt_add_executable(appMental_krisis_app
     main.cpp
-    Main.qml
 )
 
-# Создаем QML модуль
 qt_add_qml_module(appMental_krisis_app
     URI Mental_krisis_app
     VERSION 1.0
     QML_FILES Main.qml
 )
 
-# Ищем PostgreSQL
-find_package(PostgreSQL)
-if(PostgreSQL_FOUND)
-    message(STATUS "PostgreSQL found")
+# Для Android
+if(ANDROID)
+    find_library(log-lib log)
     target_link_libraries(appMental_krisis_app
         PRIVATE Qt6::Quick Qt6::QuickControls2 Qt6::Sql
-        PostgreSQL::PostgreSQL
+        ${log-lib}
+    )
+
+    # Разрешения для Android
+    set_target_properties(appMental_krisis_app PROPERTIES
+        QT_ANDROID_APP_PERMISSIONS "android.permission.INTERNET;android.permission.WRITE_EXTERNAL_STORAGE;android.permission.READ_EXTERNAL_STORAGE"
     )
 else()
-    message(WARNING "PostgreSQL not found")
-    target_link_libraries(appMental_krisis_app
-        PRIVATE Qt6::Quick Qt6::QuickControls2 Qt6::Sql
-    )
+    # Для десктопа
+    find_package(PostgreSQL)
+    if(PostgreSQL_FOUND)
+        target_link_libraries(appMental_krisis_app
+            PRIVATE Qt6::Quick Qt6::QuickControls2 Qt6::Sql
+            PostgreSQL::PostgreSQL
+        )
+        message(STATUS "PostgreSQL found")
+    else()
+        target_link_libraries(appMental_krisis_app
+            PRIVATE Qt6::Quick Qt6::QuickControls2 Qt6::Sql
+        )
+        message(WARNING "PostgreSQL not found, using SQLite only")
+    endif()
 endif()
 
 set_target_properties(appMental_krisis_app PROPERTIES
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     WIN32_EXECUTABLE TRUE
-)
-
-# Копируем QML файл в директорию сборки
-add_custom_command(TARGET appMental_krisis_app POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/Main.qml"
-        "${CMAKE_CURRENT_BINARY_DIR}/Main.qml"
-    COMMENT "Copying Main.qml to build directory"
 )

@@ -5,8 +5,8 @@ import QtQuick.Dialogs
 
 ApplicationWindow {
     id: mainWindow
-    width: 1000
-    height: 700
+    width: 360
+    height: 640
     visible: true
     title: "Mental Krisis App"
 
@@ -25,6 +25,11 @@ ApplicationWindow {
     property string tab3Text: ""
     property int tab4Value: 0
     property string tab5Text: ""
+    property int currentRecordId: 0
+    property bool isEditMode: false
+
+    // Текущая активная вкладка
+    property int currentTabIndex: 0
 
     // Список записей за текущую дату
     property var recordsList: []
@@ -39,9 +44,9 @@ ApplicationWindow {
         return Qt.formatTime(date, "HH:mm")
     }
 
-    // Функция для форматирования времени с секундами (для отображения записей)
-    function formatDateTime(date) {
-        return Qt.formatDateTime(date, "dd.MM.yyyy HH:mm:ss")
+    // Функция для форматирования времени для кнопок
+    function formatTimeShort(date) {
+        return Qt.formatTime(date, "HH:mm:ss")
     }
 
     // Флаг, показывающий, что сегодняшний день
@@ -64,152 +69,236 @@ ApplicationWindow {
         else return "#F44336";                // красный
     }
 
-    // Функция для получения краткого текста
-    function getShortText(text, maxLength) {
-        if (text.length <= maxLength) return text;
-        return text.substring(0, maxLength) + "...";
+    // Функция загрузки записи в форму
+    function loadRecord(recordId) {
+        var record = database.getRecordById(recordId);
+        if (record && record.id) {
+            currentRecordId = record.id;
+            currentDateTime = record.record_time;
+            tab1Text = record.tab1_text || "";
+            tab2Text = record.tab2_text || "";
+            tab3Text = record.tab3_text || "";
+            tab4Value = record.tab4_value || 0;
+            tab5Text = record.tab5_text || "";
+            isEditMode = true;
+
+            // Обновляем UI элементы
+            tab1TextArea.text = tab1Text;
+            tab2TextArea.text = tab2Text;
+            tab4Slider.value = tab4Value;
+            tab4SpinBox.value = tab4Value;
+            tab5TextArea.text = tab5Text;
+
+            // Переключаемся на вкладку редактирования
+            currentTabIndex = 1;
+        }
     }
 
-    // Основной контейнер
-    RowLayout {
-        anchors.fill: parent
+    // Функция сброса формы
+    function resetForm() {
+        currentRecordId = 0;
+        currentDateTime = database.currentDateTime();
+        tab1Text = "";
+        tab2Text = "";
+        tab3Text = "";
+        tab4Value = 0;
+        tab5Text = "";
+        tab1TextArea.text = "";
+        tab2TextArea.text = "";
+        tab4Slider.value = 0;
+        tab4SpinBox.value = 0;
+        tab5TextArea.text = "";
+        isEditMode = false;
+        currentTabIndex = 0;
+    }
+
+    // Функция для получения краткого описания записи
+    function getRecordSummary(record) {
+        var summary = "";
+        if (record.tab1_text && record.tab1_text.length > 0) summary += "Т1 ";
+        if (record.tab2_text && record.tab2_text.length > 0) summary += "Т2 ";
+        if (record.tab4_value > 0) summary += "Ч:" + record.tab4_value + " ";
+        if (record.tab5_text && record.tab5_text.length > 0) summary += "Т3";
+        return summary.trim() || "Только время";
+    }
+
+    // Верхняя панель с вкладками
+    Row {
+        id: tabBar
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: parent.height / 14
         spacing: 0
 
-        // Левая панель - управление и вкладки
-        ColumnLayout {
-            Layout.preferredWidth: 600
-            Layout.fillHeight: true
-            spacing: 0
-
-            // Верхняя панель с вкладками
-            Row {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 40
-                spacing: 0
-
-                Rectangle {
-                    width: parent.width/5
-                    height: parent.height
-                    color: swipeView.currentIndex === 0 ? "#4CAF50" : "#E8F5E9"
-                    border.width: 1
-                    border.color: "#388E3C"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Время"
-                        color: swipeView.currentIndex === 0 ? "white" : "#388E3C"
-                        font.bold: swipeView.currentIndex === 0
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: swipeView.currentIndex = 0
-                    }
-                }
-
-                Rectangle {
-                    width: parent.width/5
-                    height: parent.height
-                    color: swipeView.currentIndex === 1 ? "#F44336" : "#FFEBEE"
-                    border.width: 1
-                    border.color: "#D32F2F"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Текст 1"
-                        color: swipeView.currentIndex === 1 ? "white" : "#D32F2F"
-                        font.bold: swipeView.currentIndex === 1
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: swipeView.currentIndex = 1
-                    }
-                }
-
-                Rectangle {
-                    width: parent.width/5
-                    height: parent.height
-                    color: swipeView.currentIndex === 2 ? "#9E9E9E" : "#FAFAFA"
-                    border.width: 1
-                    border.color: "#616161"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Текст 2"
-                        color: swipeView.currentIndex === 2 ? "white" : "#616161"
-                        font.bold: swipeView.currentIndex === 2
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: swipeView.currentIndex = 2
-                    }
-                }
-
-                Rectangle {
-                    width: parent.width/5
-                    height: parent.height
-                    color: swipeView.currentIndex === 3 ? "#2196F3" : "#E3F2FD"
-                    border.width: 1
-                    border.color: "#1976D2"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Число"
-                        color: swipeView.currentIndex === 3 ? "white" : "#1976D2"
-                        font.bold: swipeView.currentIndex === 3
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: swipeView.currentIndex = 3
-                    }
-                }
-
-                Rectangle {
-                    width: parent.width/5
-                    height: parent.height
-                    color: swipeView.currentIndex === 4 ? "#9C27B0" : "#F3E5F5"
-                    border.width: 1
-                    border.color: "#7B1FA2"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Текст 3"
-                        color: swipeView.currentIndex === 4 ? "white" : "#7B1FA2"
-                        font.bold: swipeView.currentIndex === 4
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: swipeView.currentIndex = 4
-                    }
-                }
+        Rectangle {
+            width: parent.width/5
+            height: parent.height
+            color: currentTabIndex === 0 ? "green" : "lightgreen"
+            border.width: 1
+            border.color: "black"
+            Text {
+                anchors.centerIn: parent
+                text: "Записи"
+                color: "white"
+                font.pixelSize: parent.height * 0.3
             }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: currentTabIndex = 0
+            }
+        }
 
-            // Основной контент - SwipeView с вкладками
-            SwipeView {
-                id: swipeView
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                interactive: false
+        Rectangle {
+            width: parent.width/5
+            height: parent.height
+            color: currentTabIndex === 1 ? "red" : "pink"
+            border.width: 1
+            border.color: "black"
+            Text {
+                anchors.centerIn: parent
+                text: "Текст 1"
+                color: "white"
+                font.pixelSize: parent.height * 0.3
+            }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: currentTabIndex = 1
+            }
+        }
 
-                // Вкладка 1: Время
-                Item {
-                    ColumnLayout {
+        Rectangle {
+            width: parent.width/5
+            height: parent.height
+            color: currentTabIndex === 2 ? "lightgray" : "white"
+            border.width: 1
+            border.color: "black"
+            Text {
+                anchors.centerIn: parent
+                text: "Текст 2"
+                font.pixelSize: parent.height * 0.3
+            }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: currentTabIndex = 2
+            }
+        }
+
+        Rectangle {
+            width: parent.width/5
+            height: parent.height
+            color: currentTabIndex === 3 ? "blue" : "lightblue"
+            border.width: 1
+            border.color: "black"
+            Text {
+                anchors.centerIn: parent
+                text: "Число"
+                color: "white"
+                font.pixelSize: parent.height * 0.3
+            }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: currentTabIndex = 3
+            }
+        }
+
+        Rectangle {
+            width: parent.width/5
+            height: parent.height
+            color: currentTabIndex === 4 ? "purple" : "lavender"
+            border.width: 1
+            border.color: "black"
+            Text {
+                anchors.centerIn: parent
+                text: "Текст 3"
+                color: "white"
+                font.pixelSize: parent.height * 0.3
+            }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: currentTabIndex = 4
+            }
+        }
+    }
+
+    // Основной контент
+    Rectangle {
+        id: mainContent
+        anchors.top: tabBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: bottomPanel.top
+        color: "#FFFFFF"
+
+        // Вкладка 0: Список записей и управление временем
+        Item {
+            visible: currentTabIndex === 0
+            anchors.fill: parent
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 5
+                spacing: 5
+
+                // Заголовок с датой
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: mainContent.height * 0.08
+                    color: isToday ? "#E8F5E9" : "#FFF3E0"
+                    border.width: 1
+                    border.color: isToday ? "#4CAF50" : "#FF9800"
+
+                    RowLayout {
                         anchors.fill: parent
-                        anchors.margins: 15
-                        spacing: 10
+                        anchors.margins: 5
 
                         Text {
                             text: isToday ? "Сегодня" : formatDate(currentDateTime)
                             font.bold: true
-                            font.pixelSize: 18
+                            font.pixelSize: mainContent.height * 0.035
                             color: isToday ? "#4CAF50" : "#FF9800"
                         }
 
-                        // Выбор даты
+                        Item { Layout.fillWidth: true }
+
+                        Button {
+                            text: "Сегодня"
+                            Layout.preferredHeight: parent.height * 0.8
+                            font.pixelSize: mainContent.height * 0.025
+                            onClicked: {
+                                var today = new Date();
+                                currentDateTime = new Date(today.getFullYear(),
+                                                          today.getMonth(),
+                                                          today.getDate(),
+                                                          currentDateTime.getHours(),
+                                                          currentDateTime.getMinutes());
+                                updateRecords();
+                            }
+                        }
+                    }
+                }
+
+                // Управление временем
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: mainContent.height * 0.1
+                    spacing: 5
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+
                         RowLayout {
-                            spacing: 10
-                            Label {
+                            spacing: 2
+                            Text {
                                 text: "Дата:"
-                                Layout.preferredWidth: 50
+                                font.pixelSize: mainContent.height * 0.025
                             }
                             TextField {
                                 id: dateField
                                 Layout.fillWidth: true
                                 text: formatDate(currentDateTime)
+                                font.pixelSize: mainContent.height * 0.025
                                 onEditingFinished: {
                                     var dateParts = text.split(".");
                                     if (dateParts.length === 3) {
@@ -224,32 +313,19 @@ ApplicationWindow {
                                     }
                                 }
                             }
-                            Button {
-                                text: "Сегодня"
-                                Layout.preferredWidth: 100
-                                onClicked: {
-                                    var today = new Date();
-                                    currentDateTime = new Date(today.getFullYear(),
-                                                              today.getMonth(),
-                                                              today.getDate(),
-                                                              currentDateTime.getHours(),
-                                                              currentDateTime.getMinutes());
-                                    updateRecords();
-                                }
-                            }
                         }
 
-                        // Выбор времени
                         RowLayout {
-                            spacing: 10
-                            Label {
+                            spacing: 2
+                            Text {
                                 text: "Время:"
-                                Layout.preferredWidth: 50
+                                font.pixelSize: mainContent.height * 0.025
                             }
                             TextField {
                                 id: timeField
                                 Layout.fillWidth: true
                                 text: formatTime(currentDateTime)
+                                font.pixelSize: mainContent.height * 0.025
                                 onEditingFinished: {
                                     var timeParts = text.split(":");
                                     if (timeParts.length >= 2) {
@@ -263,542 +339,516 @@ ApplicationWindow {
                             }
                             Button {
                                 text: "Сейчас"
-                                Layout.preferredWidth: 100
+                                Layout.preferredHeight: timeField.height
+                                font.pixelSize: mainContent.height * 0.025
                                 onClicked: {
                                     currentDateTime = database.currentDateTime();
                                 }
                             }
                         }
-
-                        // Быстрые интервалы времени
-                        Text {
-                            text: "Быстрое изменение времени:"
-                            font.bold: true
-                            font.pixelSize: 14
-                        }
-
-                        GridLayout {
-                            columns: 3
-                            columnSpacing: 5
-                            rowSpacing: 5
-
-                            Button {
-                                text: "+15 мин"
-                                Layout.fillWidth: true
-                                onClicked: {
-                                    var newTime = new Date(currentDateTime);
-                                    newTime.setMinutes(newTime.getMinutes() + 15);
-                                    currentDateTime = newTime;
-                                }
-                            }
-                            Button {
-                                text: "+30 мин"
-                                Layout.fillWidth: true
-                                onClicked: {
-                                    var newTime = new Date(currentDateTime);
-                                    newTime.setMinutes(newTime.getMinutes() + 30);
-                                    currentDateTime = newTime;
-                                }
-                            }
-                            Button {
-                                text: "+1 час"
-                                Layout.fillWidth: true
-                                onClicked: {
-                                    var newTime = new Date(currentDateTime);
-                                    newTime.setHours(newTime.getHours() + 1);
-                                    currentDateTime = newTime;
-                                }
-                            }
-
-                            Button {
-                                text: "-15 мин"
-                                Layout.fillWidth: true
-                                onClicked: {
-                                    var newTime = new Date(currentDateTime);
-                                    newTime.setMinutes(newTime.getMinutes() - 15);
-                                    currentDateTime = newTime;
-                                }
-                            }
-                            Button {
-                                text: "-30 мин"
-                                Layout.fillWidth: true
-                                onClicked: {
-                                    var newTime = new Date(currentDateTime);
-                                    newTime.setMinutes(newTime.getMinutes() - 30);
-                                    currentDateTime = newTime;
-                                }
-                            }
-                            Button {
-                                text: "-1 час"
-                                Layout.fillWidth: true
-                                onClicked: {
-                                    var newTime = new Date(currentDateTime);
-                                    newTime.setHours(newTime.getHours() - 1);
-                                    currentDateTime = newTime;
-                                }
-                            }
-                        }
                     }
                 }
 
-                // Вкладка 2: Текст 1
-                Item {
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 15
+                // Быстрые интервалы времени
+                GridLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: mainContent.height * 0.12
+                    columns: 3
+                    columnSpacing: 2
+                    rowSpacing: 2
 
-                        Text {
-                            text: "Текстовое поле 1"
-                            font.bold: true
-                            font.pixelSize: 16
-                            color: "#D32F2F"
-                        }
-
-                        TextArea {
-                            id: tab1TextArea
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            placeholderText: "Введите текст для вкладки 1..."
-                            wrapMode: TextArea.Wrap
-                            font.pixelSize: 14
-                            onTextChanged: tab1Text = text
-                        }
-                    }
-                }
-
-                // Вкладка 3: Текст 2
-                Item {
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 15
-
-                        Text {
-                            text: "Текстовое поле 2"
-                            font.bold: true
-                            font.pixelSize: 16
-                            color: "#616161"
-                        }
-
-                        TextArea {
-                            id: tab2TextArea
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            placeholderText: "Введите текст для вкладки 2..."
-                            wrapMode: TextArea.Wrap
-                            font.pixelSize: 14
-                            onTextChanged: tab2Text = text
-                        }
-                    }
-                }
-
-                // Вкладка 4: Число
-                Item {
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 15
-                        spacing: 15
-
-                        Text {
-                            text: "Число от 0 до 100"
-                            font.bold: true
-                            font.pixelSize: 16
-                            color: "#1976D2"
-                        }
-
-                        Slider {
-                            id: tab4Slider
-                            Layout.fillWidth: true
-                            from: 0
-                            to: 100
-                            stepSize: 1
-                            value: tab4Value
-                            onValueChanged: tab4Value = Math.round(value)
-                        }
-
-                        RowLayout {
-                            spacing: 10
-                            Label {
-                                text: "Значение:"
-                                font.bold: true
-                            }
-                            SpinBox {
-                                id: tab4SpinBox
-                                from: 0
-                                to: 100
-                                value: tab4Value
-                                onValueChanged: tab4Value = value
-                                Layout.preferredWidth: 100
-                            }
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 40
-                                color: "#E3F2FD"
-                                border.width: 1
-                                border.color: "#1976D2"
-                                radius: 3
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: tab4Value
-                                    font.bold: true
-                                    font.pixelSize: 20
-                                    color: "#1976D2"
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Вкладка 5: Текст 3
-                Item {
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 15
-
-                        Text {
-                            text: "Текстовое поле 3"
-                            font.bold: true
-                            font.pixelSize: 16
-                            color: "#7B1FA2"
-                        }
-
-                        TextArea {
-                            id: tab5TextArea
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            placeholderText: "Введите текст для вкладки 3..."
-                            wrapMode: TextArea.Wrap
-                            font.pixelSize: 14
-                            onTextChanged: tab5Text = text
-                        }
-                    }
-                }
-            }
-
-            // Панель управления (компактная)
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 50
-                color: "#F5F5F5"
-                border.width: 1
-                border.color: "#E0E0E0"
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 5
-                    spacing: 10
-
-                    // Индикатор сохранения
-                    Rectangle {
-                        id: saveIndicator
-                        Layout.preferredWidth: 30
-                        Layout.preferredHeight: 30
-                        radius: 15
-                        color: "transparent"
-                        border.width: 2
-                        border.color: "transparent"
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: ""
-                            font.pixelSize: 16
-                            font.bold: true
-                        }
-                    }
-
-                    // Текущая дата и время
-                    Text {
+                    Button {
+                        text: "+15"
                         Layout.fillWidth: true
-                        text: formatDate(currentDateTime) + " " + formatTime(currentDateTime)
-                        font.pixelSize: 12
-                        color: "#666"
+                        Layout.fillHeight: true
+                        font.pixelSize: mainContent.height * 0.02
+                        onClicked: {
+                            var newTime = new Date(currentDateTime);
+                            newTime.setMinutes(newTime.getMinutes() + 15);
+                            currentDateTime = newTime;
+                        }
+                    }
+                    Button {
+                        text: "+30"
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        font.pixelSize: mainContent.height * 0.02
+                        onClicked: {
+                            var newTime = new Date(currentDateTime);
+                            newTime.setMinutes(newTime.getMinutes() + 30);
+                            currentDateTime = newTime;
+                        }
+                    }
+                    Button {
+                        text: "+1ч"
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        font.pixelSize: mainContent.height * 0.02
+                        onClicked: {
+                            var newTime = new Date(currentDateTime);
+                            newTime.setHours(newTime.getHours() + 1);
+                            currentDateTime = newTime;
+                        }
                     }
 
-                    // Кнопки управления
-                    Row {
-                        spacing: 5
+                    Button {
+                        text: "-15"
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        font.pixelSize: mainContent.height * 0.02
+                        onClicked: {
+                            var newTime = new Date(currentDateTime);
+                            newTime.setMinutes(newTime.getMinutes() - 15);
+                            currentDateTime = newTime;
+                        }
+                    }
+                    Button {
+                        text: "-30"
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        font.pixelSize: mainContent.height * 0.02
+                        onClicked: {
+                            var newTime = new Date(currentDateTime);
+                            newTime.setMinutes(newTime.getMinutes() - 30);
+                            currentDateTime = newTime;
+                        }
+                    }
+                    Button {
+                        text: "-1ч"
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        font.pixelSize: mainContent.height * 0.02
+                        onClicked: {
+                            var newTime = new Date(currentDateTime);
+                            newTime.setHours(newTime.getHours() - 1);
+                            currentDateTime = newTime;
+                        }
+                    }
+                }
 
-                        Button {
-                            text: "Очистить"
-                            width: 100
-                            height: 30
-                            onClicked: {
-                                tab1Text = "";
-                                tab2Text = "";
-                                tab3Text = "";
-                                tab4Value = 0;
-                                tab5Text = "";
-                                tab1TextArea.text = "";
-                                tab2TextArea.text = "";
-                                tab4Slider.value = 0;
-                                tab4SpinBox.value = 0;
-                                tab5TextArea.text = "";
+                // Список записей
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    color: "#FFFFFF"
+                    border.width: 1
+                    border.color: "#E0E0E0"
 
-                                saveIndicator.border.color = "#FF9800";
-                                saveIndicator.color = "#FFF3E0";
-                                saveIndicator.children[0].text = "↺";
-                                saveIndicator.children[0].color = "#FF9800";
-                                clearIndicatorTimer.start();
-                            }
+                    ColumnLayout {
+                        anchors.fill: parent
+
+                        Text {
+                            text: "Записи за " + formatDate(currentDateTime) + " (" + recordsList.length + ")"
+                            font.bold: true
+                            font.pixelSize: mainContent.height * 0.03
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.topMargin: 5
                         }
 
-                        Button {
-                            text: "Сохранить"
-                            width: 100
-                            height: 30
-                            highlighted: true
-                            onClicked: {
-                                var success = database.saveRecord(currentDateTime,
-                                                                 tab1Text,
-                                                                 tab2Text,
-                                                                 tab3Text,
-                                                                 tab4Value,
-                                                                 tab5Text);
-                                if (success) {
-                                    saveIndicator.border.color = "#4CAF50";
-                                    saveIndicator.color = "#E8F5E9";
-                                    saveIndicator.children[0].text = "✓";
-                                    saveIndicator.children[0].color = "#4CAF50";
+                        ScrollView {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            anchors.margins: 2
+                            clip: true
 
-                                    tab1Text = "";
-                                    tab2Text = "";
-                                    tab3Text = "";
-                                    tab4Value = 0;
-                                    tab5Text = "";
-                                    tab1TextArea.text = "";
-                                    tab2TextArea.text = "";
-                                    tab4Slider.value = 0;
-                                    tab4SpinBox.value = 0;
-                                    tab5TextArea.text = "";
+                            Column {
+                                width: parent.width
+                                spacing: 1
 
-                                    swipeView.currentIndex = 0;
-                                    updateRecords();
-                                } else {
-                                    saveIndicator.border.color = "#F44336";
-                                    saveIndicator.color = "#FFEBEE";
-                                    saveIndicator.children[0].text = "✗";
-                                    saveIndicator.children[0].color = "#F44336";
+                                Repeater {
+                                    model: recordsList
+
+                                    Rectangle {
+                                        width: parent.width
+                                        height: mainContent.height * 0.1
+                                        color: index % 2 === 0 ? "#F5F5F5" : "#FFFFFF"
+                                        border.width: 1
+                                        border.color: "#E0E0E0"
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 5
+
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 2
+
+                                                Text {
+                                                    text: formatTimeShort(modelData.record_time)
+                                                    font.bold: true
+                                                    font.pixelSize: mainContent.height * 0.025
+                                                    color: "#2196F3"
+                                                }
+
+                                                Text {
+                                                    text: getRecordSummary(modelData)
+                                                    font.pixelSize: mainContent.height * 0.02
+                                                    color: "#666"
+                                                }
+                                            }
+
+                                            Button {
+                                                text: "✏️"
+                                                Layout.preferredWidth: mainContent.height * 0.08
+                                                Layout.preferredHeight: mainContent.height * 0.08
+                                                font.pixelSize: mainContent.height * 0.025
+                                                onClicked: {
+                                                    loadRecord(modelData.id);
+                                                }
+                                            }
+
+                                            Button {
+                                                text: "🗑️"
+                                                Layout.preferredWidth: mainContent.height * 0.08
+                                                Layout.preferredHeight: mainContent.height * 0.08
+                                                font.pixelSize: mainContent.height * 0.025
+                                                background: Rectangle {
+                                                    color: "#F44336"
+                                                    radius: 3
+                                                }
+                                                onClicked: {
+                                                    deleteDialog.recordId = modelData.id;
+                                                    deleteDialog.open();
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
 
-                                saveIndicatorTimer.restart();
+                                Text {
+                                    width: parent.width
+                                    height: mainContent.height * 0.1
+                                    text: "Нет записей"
+                                    color: "#999"
+                                    font.pixelSize: mainContent.height * 0.025
+                                    font.italic: true
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    visible: recordsList.length === 0
+                                }
                             }
                         }
-                    }
-                }
-
-                Timer {
-                    id: saveIndicatorTimer
-                    interval: 2000
-                    onTriggered: {
-                        saveIndicator.border.color = "transparent";
-                        saveIndicator.color = "transparent";
-                        saveIndicator.children[0].text = "";
-                    }
-                }
-
-                Timer {
-                    id: clearIndicatorTimer
-                    interval: 1000
-                    onTriggered: {
-                        saveIndicator.border.color = "transparent";
-                        saveIndicator.color = "transparent";
-                        saveIndicator.children[0].text = "";
                     }
                 }
             }
         }
 
-        // Правая панель - список записей
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            color: "#FAFAFA"
-            border.width: 1
-            border.color: "#E0E0E0"
+        // Вкладка 1: Текст 1
+        Item {
+            visible: currentTabIndex === 1
+            anchors.fill: parent
 
             ColumnLayout {
                 anchors.fill: parent
-                spacing: 0
+                anchors.margins: 10
 
-                // Заголовок панели записей
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 50
-                    color: "#2196F3"
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Записи за " + formatDate(currentDateTime)
-                        color: "white"
-                        font.bold: true
-                        font.pixelSize: 16
-                    }
+                Text {
+                    text: "Текст 1"
+                    font.bold: true
+                    font.pixelSize: mainContent.height * 0.04
+                    color: "#D32F2F"
+                    Layout.alignment: Qt.AlignHCenter
                 }
 
-                // Список записей
-                ListView {
-                    id: recordsListView
+                TextArea {
+                    id: tab1TextArea
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    model: recordsList
-                    clip: true
-                    spacing: 2
+                    placeholderText: "Введите текст..."
+                    wrapMode: TextArea.Wrap
+                    font.pixelSize: mainContent.height * 0.03
+                    onTextChanged: tab1Text = text
+                }
+            }
+        }
 
-                    delegate: Rectangle {
-                        width: recordsListView.width
-                        height: 120
-                        color: index % 2 === 0 ? "#FFFFFF" : "#F5F5F5"
-                        border.width: 1
-                        border.color: "#E0E0E0"
+        // Вкладка 2: Текст 2
+        Item {
+            visible: currentTabIndex === 2
+            anchors.fill: parent
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 10
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 10
 
-                            // Левая часть - основная информация
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                spacing: 5
+                Text {
+                    text: "Текст 2"
+                    font.bold: true
+                    font.pixelSize: mainContent.height * 0.04
+                    color: "#616161"
+                    Layout.alignment: Qt.AlignHCenter
+                }
 
-                                // Время записи
-                                Text {
-                                    text: formatDateTime(modelData.record_time)
-                                    font.bold: true
-                                    font.pixelSize: 14
-                                    color: "#2196F3"
-                                }
+                TextArea {
+                    id: tab2TextArea
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    placeholderText: "Введите текст..."
+                    wrapMode: TextArea.Wrap
+                    font.pixelSize: mainContent.height * 0.03
+                    onTextChanged: tab2Text = text
+                }
+            }
+        }
 
-                                // Текстовые поля
-                                RowLayout {
-                                    spacing: 10
+        // Вкладка 3: Число
+        Item {
+            visible: currentTabIndex === 3
+            anchors.fill: parent
 
-                                    // Текст 1
-                                    Column {
-                                        visible: modelData.tab1_text && modelData.tab1_text.length > 0
-                                        Text {
-                                            text: "Текст 1:"
-                                            font.pixelSize: 11
-                                            color: "#666"
-                                        }
-                                        Text {
-                                            text: getShortText(modelData.tab1_text, 30)
-                                            font.pixelSize: 12
-                                            font.bold: true
-                                            color: "#D32F2F"
-                                        }
-                                    }
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 10
 
-                                    // Текст 2
-                                    Column {
-                                        visible: modelData.tab2_text && modelData.tab2_text.length > 0
-                                        Text {
-                                            text: "Текст 2:"
-                                            font.pixelSize: 11
-                                            color: "#666"
-                                        }
-                                        Text {
-                                            text: getShortText(modelData.tab2_text, 30)
-                                            font.pixelSize: 12
-                                            font.bold: true
-                                            color: "#616161"
-                                        }
-                                    }
+                Text {
+                    text: "Число от 0 до 100"
+                    font.bold: true
+                    font.pixelSize: mainContent.height * 0.04
+                    color: "#1976D2"
+                    Layout.alignment: Qt.AlignHCenter
+                }
 
-                                    // Числовое значение
-                                    Column {
-                                        visible: modelData.tab4_value > 0
-                                        Text {
-                                            text: "Значение:"
-                                            font.pixelSize: 11
-                                            color: "#666"
-                                        }
-                                        Text {
-                                            text: modelData.tab4_value
-                                            font.pixelSize: 16
-                                            font.bold: true
-                                            color: getValueColor(modelData.tab4_value)
-                                        }
-                                    }
+                Slider {
+                    id: tab4Slider
+                    Layout.fillWidth: true
+                    from: 0
+                    to: 100
+                    stepSize: 1
+                    value: tab4Value
+                    onValueChanged: tab4Value = Math.round(value)
+                }
 
-                                    // Текст 3
-                                    Column {
-                                        visible: modelData.tab5_text && modelData.tab5_text.length > 0
-                                        Text {
-                                            text: "Текст 3:"
-                                            font.pixelSize: 11
-                                            color: "#666"
-                                        }
-                                        Text {
-                                            text: getShortText(modelData.tab5_text, 30)
-                                            font.pixelSize: 12
-                                            font.bold: true
-                                            color: "#7B1FA2"
-                                        }
-                                    }
-                                }
+                RowLayout {
+                    spacing: 10
+                    Layout.alignment: Qt.AlignHCenter
 
-                                // Если все поля пустые (только дата/время)
-                                Text {
-                                    visible: !modelData.tab1_text && !modelData.tab2_text &&
-                                             !modelData.tab3_text && modelData.tab4_value === 0 &&
-                                             !modelData.tab5_text
-                                    text: "Только дата/время (запись не сохранена)"
-                                    font.pixelSize: 12
-                                    font.italic: true
-                                    color: "#999"
-                                }
-                            }
+                    Text {
+                        text: "Значение:"
+                        font.bold: true
+                        font.pixelSize: mainContent.height * 0.03
+                    }
 
-                            // Правая часть - кнопка удаления
-                            Button {
-                                Layout.preferredWidth: 80
-                                Layout.preferredHeight: 30
-                                text: "Удалить"
-                                background: Rectangle {
-                                    color: "#F44336"
-                                    radius: 3
-                                }
-                                contentItem: Text {
-                                    text: "Удалить"
-                                    color: "white"
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                                onClicked: {
-                                    deleteDialog.recordId = modelData.id;
-                                    deleteDialog.open();
-                                }
-                            }
+                    SpinBox {
+                        id: tab4SpinBox
+                        from: 0
+                        to: 100
+                        value: tab4Value
+                        onValueChanged: tab4Value = value
+                        Layout.preferredWidth: mainContent.width * 0.3
+                        font.pixelSize: mainContent.height * 0.025
+                    }
+
+                    Rectangle {
+                        width: mainContent.width * 0.4
+                        height: mainContent.height * 0.1
+                        color: "#E3F2FD"
+                        border.width: 2
+                        border.color: "#1976D2"
+                        radius: 5
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: tab4Value
+                            font.bold: true
+                            font.pixelSize: mainContent.height * 0.05
+                            color: "#1976D2"
                         }
                     }
-
-                    // Если записей нет
-                    Text {
-                        anchors.centerIn: parent
-                        visible: recordsListView.count === 0
-                        text: "Нет записей за " + formatDate(currentDateTime)
-                        color: "#999"
-                        font.pixelSize: 16
-                        font.italic: true
-                    }
                 }
 
-                // Статистика
-                Rectangle {
+                Item { Layout.fillHeight: true }
+            }
+        }
+
+        // Вкладка 4: Текст 3
+        Item {
+            visible: currentTabIndex === 4
+            anchors.fill: parent
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+
+                Text {
+                    text: "Текст 3"
+                    font.bold: true
+                    font.pixelSize: mainContent.height * 0.04
+                    color: "#7B1FA2"
+                    Layout.alignment: Qt.AlignHCenter
+                }
+
+                TextArea {
+                    id: tab5TextArea
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 30
-                    color: "#E3F2FD"
-                    border.width: 1
-                    border.color: "#BBDEFB"
+                    Layout.fillHeight: true
+                    placeholderText: "Введите текст..."
+                    wrapMode: TextArea.Wrap
+                    font.pixelSize: mainContent.height * 0.03
+                    onTextChanged: tab5Text = text
+                }
+            }
+        }
+    }
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Всего записей: " + recordsListView.count
-                        font.pixelSize: 12
-                        color: "#1976D2"
+    // Нижняя панель управления
+    Rectangle {
+        id: bottomPanel
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: parent.height / 10
+        color: "#F5F5F5"
+        border.width: 1
+        border.color: "#E0E0E0"
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.margins: 5
+            spacing: 5
+
+            // Индикатор режима
+            Text {
+                text: isEditMode ? "✏️ Редакт." : "➕ Новая"
+                color: isEditMode ? "#FF9800" : "#4CAF50"
+                font.pixelSize: bottomPanel.height * 0.25
+                Layout.preferredWidth: bottomPanel.width * 0.2
+            }
+
+            // Время и дата
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+
+                Text {
+                    text: formatDate(currentDateTime)
+                    font.pixelSize: bottomPanel.height * 0.2
+                    color: "#666"
+                }
+
+                Text {
+                    text: formatTime(currentDateTime)
+                    font.pixelSize: bottomPanel.height * 0.25
+                    color: "#2196F3"
+                    font.bold: true
+                }
+            }
+
+            // Кнопки управления
+            Row {
+                spacing: 2
+
+                Button {
+                    text: "🆕"
+                    width: bottomPanel.height * 0.8
+                    height: bottomPanel.height * 0.8
+                    font.pixelSize: bottomPanel.height * 0.4
+                    onClicked: {
+                        resetForm();
+                        saveIndicator.text = "🆕";
+                        saveIndicator.color = "#2196F3";
+                        newIndicatorTimer.start();
                     }
                 }
+
+                Button {
+                    text: "🗑️"
+                    width: bottomPanel.height * 0.8
+                    height: bottomPanel.height * 0.8
+                    font.pixelSize: bottomPanel.height * 0.4
+                    onClicked: {
+                        tab1Text = "";
+                        tab2Text = "";
+                        tab3Text = "";
+                        tab4Value = 0;
+                        tab5Text = "";
+                        tab1TextArea.text = "";
+                        tab2TextArea.text = "";
+                        tab4Slider.value = 0;
+                        tab4SpinBox.value = 0;
+                        tab5TextArea.text = "";
+
+                        saveIndicator.text = "↺";
+                        saveIndicator.color = "#FF9800";
+                        clearIndicatorTimer.start();
+                    }
+                }
+
+                Button {
+                    text: isEditMode ? "💾" : "✓"
+                    width: bottomPanel.height * 0.8
+                    height: bottomPanel.height * 0.8
+                    font.pixelSize: bottomPanel.height * 0.4
+                    background: Rectangle {
+                        color: isEditMode ? "#FF9800" : "#4CAF50"
+                        radius: 5
+                    }
+                    onClicked: {
+                        var success;
+                        if (isEditMode) {
+                            success = database.updateRecord(currentRecordId, currentDateTime,
+                                                           tab1Text, tab2Text, tab3Text,
+                                                           tab4Value, tab5Text);
+                            if (success) {
+                                saveIndicator.text = "✓";
+                                saveIndicator.color = "#FF9800";
+                                updateRecords();
+                            } else {
+                                saveIndicator.text = "✗";
+                                saveIndicator.color = "#F44336";
+                            }
+                        } else {
+                            success = database.saveRecord(currentDateTime,
+                                                         tab1Text, tab2Text, tab3Text,
+                                                         tab4Value, tab5Text);
+                            if (success) {
+                                saveIndicator.text = "✓";
+                                saveIndicator.color = "#4CAF50";
+                                resetForm();
+                                updateRecords();
+                            } else {
+                                saveIndicator.text = "✗";
+                                saveIndicator.color = "#F44336";
+                            }
+                        }
+
+                        saveIndicatorTimer.restart();
+                    }
+                }
+            }
+
+            // Индикатор сохранения
+            Text {
+                id: saveIndicator
+                text: ""
+                font.pixelSize: bottomPanel.height * 0.4
+                font.bold: true
+                Layout.preferredWidth: bottomPanel.height * 0.8
+                horizontalAlignment: Text.AlignHCenter
+            }
+        }
+
+        Timer {
+            id: saveIndicatorTimer
+            interval: 2000
+            onTriggered: {
+                saveIndicator.text = "";
+            }
+        }
+
+        Timer {
+            id: clearIndicatorTimer
+            interval: 1000
+            onTriggered: {
+                saveIndicator.text = "";
+            }
+        }
+
+        Timer {
+            id: newIndicatorTimer
+            interval: 1000
+            onTriggered: {
+                saveIndicator.text = "";
             }
         }
     }
@@ -806,10 +856,10 @@ ApplicationWindow {
     // Диалог подтверждения удаления
     Dialog {
         id: deleteDialog
-        title: "Подтверждение удаления"
+        title: "Удаление записи"
         anchors.centerIn: parent
-        width: 300
-        height: 150
+        width: parent.width * 0.8
+        height: parent.height * 0.2
         modal: true
 
         property int recordId: -1
@@ -819,9 +869,9 @@ ApplicationWindow {
             spacing: 10
 
             Text {
-                text: "Вы уверены, что хотите удалить эту запись?"
-                wrapMode: Text.WordWrap
-                Layout.fillWidth: true
+                text: "Удалить эту запись?"
+                font.pixelSize: deleteDialog.height * 0.15
+                Layout.alignment: Qt.AlignHCenter
             }
 
             RowLayout {
@@ -848,6 +898,9 @@ ApplicationWindow {
                     onClicked: {
                         if (database.deleteRecord(deleteDialog.recordId)) {
                             updateRecords();
+                            if (currentRecordId === deleteDialog.recordId) {
+                                resetForm();
+                            }
                             deleteDialog.close();
                         }
                     }
@@ -863,15 +916,12 @@ ApplicationWindow {
         updateRecords();
     }
 
-    // Обновляем список записей при сохранении новой записи
+    // Обновляем список записей при сохранении, обновлении или удалении
     Connections {
         target: database
-        onRecordSaved: {
-            updateRecords();
-        }
-        onRecordDeleted: {
-            updateRecords();
-        }
+        onRecordSaved: updateRecords()
+        onRecordUpdated: updateRecords()
+        onRecordDeleted: updateRecords()
     }
 
     // Инициализация при загрузке
