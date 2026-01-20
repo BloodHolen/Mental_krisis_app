@@ -10,14 +10,6 @@ ApplicationWindow {
     visible: true
     title: "Mental Krisis App"
 
-    // ==================== НАСТРОЙКИ ПОДКЛЮЧЕНИЯ К БАЗЕ ДАННЫХ ====================
-    // Чтобы изменить IP адрес сервера, найдите в main.cpp следующие строки:
-    // db.setHostName("localhost"); // ← Измените "localhost" на нужный IP
-    // db.setPort(5432);           // ← Порт PostgreSQL
-    // db.setUserName("postgres");  // ← Имя пользователя
-    // db.setPassword("postgres");  // ← Пароль
-    // ============================================================================
-
     // Данные для текущей записи
     property date currentDateTime: database.currentDateTime()
     property string tab1Text: ""
@@ -62,13 +54,6 @@ ApplicationWindow {
         recordsList = database.getRecordsForDate(currentDateTime);
     }
 
-    // Функция для получения цвета в зависимости от значения (0-100)
-    function getValueColor(value) {
-        if (value < 30) return "#4CAF50";      // зеленый
-        else if (value < 70) return "#FF9800"; // оранжевый
-        else return "#F44336";                // красный
-    }
-
     // Функция загрузки записи в форму
     function loadRecord(recordId) {
         var record = database.getRecordById(recordId);
@@ -85,11 +70,12 @@ ApplicationWindow {
             // Обновляем UI элементы
             tab1TextArea.text = tab1Text;
             tab2TextArea.text = tab2Text;
+            tab3TextArea.text = tab3Text;
             tab4Slider.value = tab4Value;
             tab4SpinBox.value = tab4Value;
             tab5TextArea.text = tab5Text;
 
-            // Переключаемся на вкладку редактирования
+            // Переключаемся на вторую вкладку (Текст 1)
             currentTabIndex = 1;
         }
     }
@@ -105,6 +91,7 @@ ApplicationWindow {
         tab5Text = "";
         tab1TextArea.text = "";
         tab2TextArea.text = "";
+        tab3TextArea.text = "";
         tab4Slider.value = 0;
         tab4SpinBox.value = 0;
         tab5TextArea.text = "";
@@ -117,31 +104,34 @@ ApplicationWindow {
         var summary = "";
         if (record.tab1_text && record.tab1_text.length > 0) summary += "Т1 ";
         if (record.tab2_text && record.tab2_text.length > 0) summary += "Т2 ";
+        if (record.tab3_text && record.tab3_text.length > 0) summary += "Т3 ";
         if (record.tab4_value > 0) summary += "Ч:" + record.tab4_value + " ";
-        if (record.tab5_text && record.tab5_text.length > 0) summary += "Т3";
+        if (record.tab5_text && record.tab5_text.length > 0) summary += "Т4";
         return summary.trim() || "Только время";
     }
 
-    // Верхняя панель с вкладками
+    // Верхняя панель с вкладками (компактная)
     Row {
         id: tabBar
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: parent.height / 14
+        height: 40
         spacing: 0
 
+        // Вкладка 0: Записи
         Rectangle {
             width: parent.width/5
             height: parent.height
-            color: currentTabIndex === 0 ? "green" : "lightgreen"
+            color: currentTabIndex === 0 ? "#4CAF50" : "#E8F5E9"
             border.width: 1
-            border.color: "black"
+            border.color: "#388E3C"
             Text {
                 anchors.centerIn: parent
                 text: "Записи"
-                color: "white"
-                font.pixelSize: parent.height * 0.3
+                color: currentTabIndex === 0 ? "white" : "#388E3C"
+                font.pixelSize: 12
+                font.bold: currentTabIndex === 0
             }
             MouseArea {
                 anchors.fill: parent
@@ -149,17 +139,19 @@ ApplicationWindow {
             }
         }
 
+        // Вкладка 1: Текст 1
         Rectangle {
             width: parent.width/5
             height: parent.height
-            color: currentTabIndex === 1 ? "red" : "pink"
+            color: currentTabIndex === 1 ? "#F44336" : "#FFEBEE"
             border.width: 1
-            border.color: "black"
+            border.color: "#D32F2F"
             Text {
                 anchors.centerIn: parent
                 text: "Текст 1"
-                color: "white"
-                font.pixelSize: parent.height * 0.3
+                color: currentTabIndex === 1 ? "white" : "#D32F2F"
+                font.pixelSize: 12
+                font.bold: currentTabIndex === 1
             }
             MouseArea {
                 anchors.fill: parent
@@ -167,16 +159,19 @@ ApplicationWindow {
             }
         }
 
+        // Вкладка 2: Текст 2
         Rectangle {
             width: parent.width/5
             height: parent.height
-            color: currentTabIndex === 2 ? "lightgray" : "white"
+            color: currentTabIndex === 2 ? "#9E9E9E" : "#FAFAFA"
             border.width: 1
-            border.color: "black"
+            border.color: "#616161"
             Text {
                 anchors.centerIn: parent
                 text: "Текст 2"
-                font.pixelSize: parent.height * 0.3
+                color: currentTabIndex === 2 ? "white" : "#616161"
+                font.pixelSize: 12
+                font.bold: currentTabIndex === 2
             }
             MouseArea {
                 anchors.fill: parent
@@ -184,17 +179,19 @@ ApplicationWindow {
             }
         }
 
+        // Вкладка 3: Число (синий)
         Rectangle {
             width: parent.width/5
             height: parent.height
-            color: currentTabIndex === 3 ? "blue" : "lightblue"
+            color: currentTabIndex === 3 ? "#2196F3" : "#E3F2FD"
             border.width: 1
-            border.color: "black"
+            border.color: "#1976D2"
             Text {
                 anchors.centerIn: parent
                 text: "Число"
-                color: "white"
-                font.pixelSize: parent.height * 0.3
+                color: currentTabIndex === 3 ? "white" : "#1976D2"
+                font.pixelSize: 12
+                font.bold: currentTabIndex === 3
             }
             MouseArea {
                 anchors.fill: parent
@@ -202,17 +199,19 @@ ApplicationWindow {
             }
         }
 
+        // Вкладка 4: Текст 3 (фиолетовый)
         Rectangle {
             width: parent.width/5
             height: parent.height
-            color: currentTabIndex === 4 ? "purple" : "lavender"
+            color: currentTabIndex === 4 ? "#9C27B0" : "#F3E5F5"
             border.width: 1
-            border.color: "black"
+            border.color: "#7B1FA2"
             Text {
                 anchors.centerIn: parent
                 text: "Текст 3"
-                color: "white"
-                font.pixelSize: parent.height * 0.3
+                color: currentTabIndex === 4 ? "white" : "#7B1FA2"
+                font.pixelSize: 12
+                font.bold: currentTabIndex === 4
             }
             MouseArea {
                 anchors.fill: parent
@@ -230,7 +229,7 @@ ApplicationWindow {
         anchors.bottom: bottomPanel.top
         color: "#FFFFFF"
 
-        // Вкладка 0: Список записей и управление временем
+        // Вкладка 0: Список записей
         Item {
             visible: currentTabIndex === 0
             anchors.fill: parent
@@ -243,125 +242,79 @@ ApplicationWindow {
                 // Заголовок с датой
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: mainContent.height * 0.08
+                    Layout.preferredHeight: 60
                     color: isToday ? "#E8F5E9" : "#FFF3E0"
                     border.width: 1
                     border.color: isToday ? "#4CAF50" : "#FF9800"
+                    radius: 5
 
                     RowLayout {
                         anchors.fill: parent
                         anchors.margins: 5
 
-                        Text {
-                            text: isToday ? "Сегодня" : formatDate(currentDateTime)
-                            font.bold: true
-                            font.pixelSize: mainContent.height * 0.035
-                            color: isToday ? "#4CAF50" : "#FF9800"
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Text {
+                                text: isToday ? "Сегодня" : formatDate(currentDateTime)
+                                font.bold: true
+                                font.pixelSize: 14
+                                color: isToday ? "#4CAF50" : "#FF9800"
+                            }
+
+                            Text {
+                                text: formatTime(currentDateTime)
+                                font.pixelSize: 12
+                                color: "#666"
+                            }
                         }
 
-                        Item { Layout.fillWidth: true }
+                        Column {
+                            spacing: 2
 
-                        Button {
-                            text: "Сегодня"
-                            Layout.preferredHeight: parent.height * 0.8
-                            font.pixelSize: mainContent.height * 0.025
-                            onClicked: {
-                                var today = new Date();
-                                currentDateTime = new Date(today.getFullYear(),
-                                                          today.getMonth(),
-                                                          today.getDate(),
-                                                          currentDateTime.getHours(),
-                                                          currentDateTime.getMinutes());
-                                updateRecords();
+                            Button {
+                                text: "Сейчас"
+                                width: 70
+                                height: 25
+                                font.pixelSize: 10
+                                onClicked: {
+                                    currentDateTime = database.currentDateTime();
+                                }
+                            }
+
+                            Button {
+                                text: "Сегодня"
+                                width: 70
+                                height: 25
+                                font.pixelSize: 10
+                                onClicked: {
+                                    var today = new Date();
+                                    currentDateTime = new Date(today.getFullYear(),
+                                                              today.getMonth(),
+                                                              today.getDate(),
+                                                              currentDateTime.getHours(),
+                                                              currentDateTime.getMinutes());
+                                    updateRecords();
+                                }
                             }
                         }
                     }
                 }
 
                 // Управление временем
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: mainContent.height * 0.1
-                    spacing: 5
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 2
-
-                        RowLayout {
-                            spacing: 2
-                            Text {
-                                text: "Дата:"
-                                font.pixelSize: mainContent.height * 0.025
-                            }
-                            TextField {
-                                id: dateField
-                                Layout.fillWidth: true
-                                text: formatDate(currentDateTime)
-                                font.pixelSize: mainContent.height * 0.025
-                                onEditingFinished: {
-                                    var dateParts = text.split(".");
-                                    if (dateParts.length === 3) {
-                                        var day = parseInt(dateParts[0]);
-                                        var month = parseInt(dateParts[1]) - 1;
-                                        var year = parseInt(dateParts[2]);
-                                        var newDate = new Date(year, month, day);
-                                        newDate.setHours(currentDateTime.getHours());
-                                        newDate.setMinutes(currentDateTime.getMinutes());
-                                        currentDateTime = newDate;
-                                        updateRecords();
-                                    }
-                                }
-                            }
-                        }
-
-                        RowLayout {
-                            spacing: 2
-                            Text {
-                                text: "Время:"
-                                font.pixelSize: mainContent.height * 0.025
-                            }
-                            TextField {
-                                id: timeField
-                                Layout.fillWidth: true
-                                text: formatTime(currentDateTime)
-                                font.pixelSize: mainContent.height * 0.025
-                                onEditingFinished: {
-                                    var timeParts = text.split(":");
-                                    if (timeParts.length >= 2) {
-                                        currentDateTime = new Date(currentDateTime.getFullYear(),
-                                                                  currentDateTime.getMonth(),
-                                                                  currentDateTime.getDate(),
-                                                                  parseInt(timeParts[0]),
-                                                                  parseInt(timeParts[1]));
-                                    }
-                                }
-                            }
-                            Button {
-                                text: "Сейчас"
-                                Layout.preferredHeight: timeField.height
-                                font.pixelSize: mainContent.height * 0.025
-                                onClicked: {
-                                    currentDateTime = database.currentDateTime();
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Быстрые интервалы времени
                 GridLayout {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: mainContent.height * 0.12
+                    Layout.preferredHeight: 40
                     columns: 3
                     columnSpacing: 2
                     rowSpacing: 2
 
                     Button {
-                        text: "+15"
+                        text: "+15 мин"
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        font.pixelSize: mainContent.height * 0.02
+                        Layout.fillHeight: false
+                        font.pixelSize: 11
                         onClicked: {
                             var newTime = new Date(currentDateTime);
                             newTime.setMinutes(newTime.getMinutes() + 15);
@@ -369,10 +322,10 @@ ApplicationWindow {
                         }
                     }
                     Button {
-                        text: "+30"
+                        text: "+30 мин"
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        font.pixelSize: mainContent.height * 0.02
+                        Layout.fillHeight: false
+                        font.pixelSize: 11
                         onClicked: {
                             var newTime = new Date(currentDateTime);
                             newTime.setMinutes(newTime.getMinutes() + 30);
@@ -380,10 +333,10 @@ ApplicationWindow {
                         }
                     }
                     Button {
-                        text: "+1ч"
+                        text: "+1 час"
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        font.pixelSize: mainContent.height * 0.02
+                        Layout.fillHeight: false
+                        font.pixelSize: 11
                         onClicked: {
                             var newTime = new Date(currentDateTime);
                             newTime.setHours(newTime.getHours() + 1);
@@ -392,10 +345,10 @@ ApplicationWindow {
                     }
 
                     Button {
-                        text: "-15"
+                        text: "-15 мин"
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        font.pixelSize: mainContent.height * 0.02
+                        Layout.fillHeight: false
+                        font.pixelSize: 11
                         onClicked: {
                             var newTime = new Date(currentDateTime);
                             newTime.setMinutes(newTime.getMinutes() - 15);
@@ -403,10 +356,10 @@ ApplicationWindow {
                         }
                     }
                     Button {
-                        text: "-30"
+                        text: "-30 мин"
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        font.pixelSize: mainContent.height * 0.02
+                        Layout.fillHeight: false
+                        font.pixelSize: 11
                         onClicked: {
                             var newTime = new Date(currentDateTime);
                             newTime.setMinutes(newTime.getMinutes() - 30);
@@ -414,10 +367,10 @@ ApplicationWindow {
                         }
                     }
                     Button {
-                        text: "-1ч"
+                        text: "-1 час"
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        font.pixelSize: mainContent.height * 0.02
+                        Layout.fillHeight: false
+                        font.pixelSize: 11
                         onClicked: {
                             var newTime = new Date(currentDateTime);
                             newTime.setHours(newTime.getHours() - 1);
@@ -433,6 +386,7 @@ ApplicationWindow {
                     color: "#FFFFFF"
                     border.width: 1
                     border.color: "#E0E0E0"
+                    radius: 5
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -440,7 +394,7 @@ ApplicationWindow {
                         Text {
                             text: "Записи за " + formatDate(currentDateTime) + " (" + recordsList.length + ")"
                             font.bold: true
-                            font.pixelSize: mainContent.height * 0.03
+                            font.pixelSize: 12
                             Layout.alignment: Qt.AlignHCenter
                             Layout.topMargin: 5
                         }
@@ -448,7 +402,6 @@ ApplicationWindow {
                         ScrollView {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            anchors.margins: 2
                             clip: true
 
                             Column {
@@ -460,38 +413,39 @@ ApplicationWindow {
 
                                     Rectangle {
                                         width: parent.width
-                                        height: mainContent.height * 0.1
+                                        height: 50
                                         color: index % 2 === 0 ? "#F5F5F5" : "#FFFFFF"
                                         border.width: 1
                                         border.color: "#E0E0E0"
 
                                         RowLayout {
                                             anchors.fill: parent
-                                            anchors.margins: 5
+                                            anchors.margins: 3
 
                                             ColumnLayout {
                                                 Layout.fillWidth: true
-                                                spacing: 2
+                                                spacing: 1
 
                                                 Text {
                                                     text: formatTimeShort(modelData.record_time)
                                                     font.bold: true
-                                                    font.pixelSize: mainContent.height * 0.025
+                                                    font.pixelSize: 12
                                                     color: "#2196F3"
                                                 }
 
                                                 Text {
                                                     text: getRecordSummary(modelData)
-                                                    font.pixelSize: mainContent.height * 0.02
+                                                    font.pixelSize: 10
                                                     color: "#666"
+                                                    elide: Text.ElideRight
                                                 }
                                             }
 
                                             Button {
                                                 text: "✏️"
-                                                Layout.preferredWidth: mainContent.height * 0.08
-                                                Layout.preferredHeight: mainContent.height * 0.08
-                                                font.pixelSize: mainContent.height * 0.025
+                                                Layout.preferredWidth: 35
+                                                Layout.preferredHeight: 35
+                                                font.pixelSize: 14
                                                 onClicked: {
                                                     loadRecord(modelData.id);
                                                 }
@@ -499,9 +453,9 @@ ApplicationWindow {
 
                                             Button {
                                                 text: "🗑️"
-                                                Layout.preferredWidth: mainContent.height * 0.08
-                                                Layout.preferredHeight: mainContent.height * 0.08
-                                                font.pixelSize: mainContent.height * 0.025
+                                                Layout.preferredWidth: 35
+                                                Layout.preferredHeight: 35
+                                                font.pixelSize: 14
                                                 background: Rectangle {
                                                     color: "#F44336"
                                                     radius: 3
@@ -517,10 +471,10 @@ ApplicationWindow {
 
                                 Text {
                                     width: parent.width
-                                    height: mainContent.height * 0.1
+                                    height: 50
                                     text: "Нет записей"
                                     color: "#999"
-                                    font.pixelSize: mainContent.height * 0.025
+                                    font.pixelSize: 12
                                     font.italic: true
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
@@ -533,19 +487,19 @@ ApplicationWindow {
             }
         }
 
-        // Вкладка 1: Текст 1
+        // Вкладка 1: Текст 1 (полный экран)
         Item {
             visible: currentTabIndex === 1
             anchors.fill: parent
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 10
+                anchors.margins: 5
 
                 Text {
                     text: "Текст 1"
                     font.bold: true
-                    font.pixelSize: mainContent.height * 0.04
+                    font.pixelSize: 16
                     color: "#D32F2F"
                     Layout.alignment: Qt.AlignHCenter
                 }
@@ -556,25 +510,25 @@ ApplicationWindow {
                     Layout.fillHeight: true
                     placeholderText: "Введите текст..."
                     wrapMode: TextArea.Wrap
-                    font.pixelSize: mainContent.height * 0.03
+                    font.pixelSize: 14
                     onTextChanged: tab1Text = text
                 }
             }
         }
 
-        // Вкладка 2: Текст 2
+        // Вкладка 2: Текст 2 (полный экран)
         Item {
             visible: currentTabIndex === 2
             anchors.fill: parent
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 10
+                anchors.margins: 5
 
                 Text {
                     text: "Текст 2"
                     font.bold: true
-                    font.pixelSize: mainContent.height * 0.04
+                    font.pixelSize: 16
                     color: "#616161"
                     Layout.alignment: Qt.AlignHCenter
                 }
@@ -585,13 +539,13 @@ ApplicationWindow {
                     Layout.fillHeight: true
                     placeholderText: "Введите текст..."
                     wrapMode: TextArea.Wrap
-                    font.pixelSize: mainContent.height * 0.03
+                    font.pixelSize: 14
                     onTextChanged: tab2Text = text
                 }
             }
         }
 
-        // Вкладка 3: Число
+        // Вкладка 3: Число (полный экран)
         Item {
             visible: currentTabIndex === 3
             anchors.fill: parent
@@ -604,7 +558,7 @@ ApplicationWindow {
                 Text {
                     text: "Число от 0 до 100"
                     font.bold: true
-                    font.pixelSize: mainContent.height * 0.04
+                    font.pixelSize: 16
                     color: "#1976D2"
                     Layout.alignment: Qt.AlignHCenter
                 }
@@ -626,7 +580,7 @@ ApplicationWindow {
                     Text {
                         text: "Значение:"
                         font.bold: true
-                        font.pixelSize: mainContent.height * 0.03
+                        font.pixelSize: 14
                     }
 
                     SpinBox {
@@ -635,13 +589,13 @@ ApplicationWindow {
                         to: 100
                         value: tab4Value
                         onValueChanged: tab4Value = value
-                        Layout.preferredWidth: mainContent.width * 0.3
-                        font.pixelSize: mainContent.height * 0.025
+                        width: 80
+                        font.pixelSize: 12
                     }
 
                     Rectangle {
-                        width: mainContent.width * 0.4
-                        height: mainContent.height * 0.1
+                        width: 60
+                        height: 35
                         color: "#E3F2FD"
                         border.width: 2
                         border.color: "#1976D2"
@@ -651,7 +605,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             text: tab4Value
                             font.bold: true
-                            font.pixelSize: mainContent.height * 0.05
+                            font.pixelSize: 16
                             color: "#1976D2"
                         }
                     }
@@ -661,19 +615,19 @@ ApplicationWindow {
             }
         }
 
-        // Вкладка 4: Текст 3
+        // Вкладка 4: Текст 3 (полный экран)
         Item {
             visible: currentTabIndex === 4
             anchors.fill: parent
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 10
+                anchors.margins: 5
 
                 Text {
                     text: "Текст 3"
                     font.bold: true
-                    font.pixelSize: mainContent.height * 0.04
+                    font.pixelSize: 16
                     color: "#7B1FA2"
                     Layout.alignment: Qt.AlignHCenter
                 }
@@ -684,7 +638,7 @@ ApplicationWindow {
                     Layout.fillHeight: true
                     placeholderText: "Введите текст..."
                     wrapMode: TextArea.Wrap
-                    font.pixelSize: mainContent.height * 0.03
+                    font.pixelSize: 14
                     onTextChanged: tab5Text = text
                 }
             }
@@ -697,38 +651,38 @@ ApplicationWindow {
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        height: parent.height / 10
+        height: 50
         color: "#F5F5F5"
         border.width: 1
         border.color: "#E0E0E0"
 
         RowLayout {
             anchors.fill: parent
-            anchors.margins: 5
-            spacing: 5
+            anchors.margins: 3
+            spacing: 3
 
             // Индикатор режима
             Text {
-                text: isEditMode ? "✏️ Редакт." : "➕ Новая"
+                text: isEditMode ? "✏️ Ред." : "➕ Нов."
                 color: isEditMode ? "#FF9800" : "#4CAF50"
-                font.pixelSize: bottomPanel.height * 0.25
-                Layout.preferredWidth: bottomPanel.width * 0.2
+                font.pixelSize: 12
+                Layout.preferredWidth: 60
             }
 
             // Время и дата
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 2
+                spacing: 1
 
                 Text {
                     text: formatDate(currentDateTime)
-                    font.pixelSize: bottomPanel.height * 0.2
+                    font.pixelSize: 11
                     color: "#666"
                 }
 
                 Text {
                     text: formatTime(currentDateTime)
-                    font.pixelSize: bottomPanel.height * 0.25
+                    font.pixelSize: 12
                     color: "#2196F3"
                     font.bold: true
                 }
@@ -736,13 +690,13 @@ ApplicationWindow {
 
             // Кнопки управления
             Row {
-                spacing: 2
+                spacing: 3
 
                 Button {
                     text: "🆕"
-                    width: bottomPanel.height * 0.8
-                    height: bottomPanel.height * 0.8
-                    font.pixelSize: bottomPanel.height * 0.4
+                    width: 35
+                    height: 35
+                    font.pixelSize: 14
                     onClicked: {
                         resetForm();
                         saveIndicator.text = "🆕";
@@ -753,9 +707,9 @@ ApplicationWindow {
 
                 Button {
                     text: "🗑️"
-                    width: bottomPanel.height * 0.8
-                    height: bottomPanel.height * 0.8
-                    font.pixelSize: bottomPanel.height * 0.4
+                    width: 35
+                    height: 35
+                    font.pixelSize: 14
                     onClicked: {
                         tab1Text = "";
                         tab2Text = "";
@@ -764,6 +718,7 @@ ApplicationWindow {
                         tab5Text = "";
                         tab1TextArea.text = "";
                         tab2TextArea.text = "";
+                        tab3TextArea.text = "";
                         tab4Slider.value = 0;
                         tab4SpinBox.value = 0;
                         tab5TextArea.text = "";
@@ -776,9 +731,9 @@ ApplicationWindow {
 
                 Button {
                     text: isEditMode ? "💾" : "✓"
-                    width: bottomPanel.height * 0.8
-                    height: bottomPanel.height * 0.8
-                    font.pixelSize: bottomPanel.height * 0.4
+                    width: 35
+                    height: 35
+                    font.pixelSize: 14
                     background: Rectangle {
                         color: isEditMode ? "#FF9800" : "#4CAF50"
                         radius: 5
@@ -821,9 +776,9 @@ ApplicationWindow {
             Text {
                 id: saveIndicator
                 text: ""
-                font.pixelSize: bottomPanel.height * 0.4
+                font.pixelSize: 14
                 font.bold: true
-                Layout.preferredWidth: bottomPanel.height * 0.8
+                width: 35
                 horizontalAlignment: Text.AlignHCenter
             }
         }
@@ -858,8 +813,8 @@ ApplicationWindow {
         id: deleteDialog
         title: "Удаление записи"
         anchors.centerIn: parent
-        width: parent.width * 0.8
-        height: parent.height * 0.2
+        width: 280
+        height: 120
         modal: true
 
         property int recordId: -1
@@ -870,7 +825,7 @@ ApplicationWindow {
 
             Text {
                 text: "Удалить эту запись?"
-                font.pixelSize: deleteDialog.height * 0.15
+                font.pixelSize: 14
                 Layout.alignment: Qt.AlignHCenter
             }
 
@@ -911,8 +866,6 @@ ApplicationWindow {
 
     // Обновляем поля при изменении даты/времени
     onCurrentDateTimeChanged: {
-        dateField.text = formatDate(currentDateTime);
-        timeField.text = formatTime(currentDateTime);
         updateRecords();
     }
 

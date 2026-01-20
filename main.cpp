@@ -12,10 +12,13 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QCoreApplication>
+#include <QSettings>
+#include <QNetworkInterface>
 
 class DatabaseManager : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool isConnected READ isConnected NOTIFY connectionChanged)
+    Q_PROPERTY(QString connectionType READ connectionType NOTIFY connectionChanged)
 
 public:
     explicit DatabaseManager(QObject *parent = nullptr) : QObject(parent), m_connected(false) {
@@ -23,6 +26,7 @@ public:
     }
 
     bool isConnected() const { return m_connected; }
+    QString connectionType() const { return m_connectionType; }
 
     Q_INVOKABLE bool saveRecord(const QDateTime &dateTime,
                                 const QString &tab1,
@@ -144,10 +148,18 @@ public:
         }
 
         QSqlQuery query;
-        query.prepare("SELECT id, record_time, tab1_text, tab2_text, tab3_text, tab4_value, tab5_text "
-                      "FROM mental_records "
-                      "WHERE DATE(record_time) = DATE(?) "
-                      "ORDER BY record_time DESC");
+        // Для совместимости с PostgreSQL и SQLite
+        if (m_connectionType == "PostgreSQL") {
+            query.prepare("SELECT id, record_time, tab1_text, tab2_text, tab3_text, tab4_value, tab5_text "
+                          "FROM mental_records "
+                          "WHERE DATE(record_time) = DATE(?) "
+                          "ORDER BY record_time DESC");
+        } else {
+            query.prepare("SELECT id, record_time, tab1_text, tab2_text, tab3_text, tab4_value, tab5_text "
+                          "FROM mental_records "
+                          "WHERE DATE(record_time) = DATE(?) "
+                          "ORDER BY record_time DESC");
+        }
 
         query.addBindValue(dateTime);
 
@@ -190,6 +202,34 @@ public:
         return success;
     }
 
+    // Метод для изменения настроек подключения к PostgreSQL
+    Q_INVOKABLE void setConnectionParams(const QString &host, int port,
+                                         const QString &database, const QString &user,
+                                         const QString &password) {
+        m_pgHost = host;
+        m_pgPort = port;
+        m_pgDatabase = database;
+        m_pgUser = user;
+        m_pgPassword = password;
+
+        // Сохраняем настройки
+        QSettings settings;
+        settings.setValue("postgres/host", host);
+        settings.setValue("postgres/port", port);
+        settings.setValue("postgres/database", database);
+        settings.setValue("postgres/user", user);
+        settings.setValue("postgres/password", password);
+
+        // Переподключаемся
+        reconnect();
+    }
+
+    Q_INVOKABLE void reconnect() {
+        m_connected = false;
+        emit connectionChanged(m_connected);
+        initDatabase();
+    }
+
 signals:
     void connectionChanged(bool connected);
     void recordSaved();
@@ -200,20 +240,183 @@ private:
     void initDatabase() {
         qDebug() << "Доступные драйверы БД:" << QSqlDatabase::drivers();
 
+        // Закрываем старое соединение
         if (QSqlDatabase::contains()) {
+            QSqlDatabase db = QSqlDatabase::database();
+            if (db.isOpen()) {
+                db.close();
+            }
             QSqlDatabase::removeDatabase(QSqlDatabase::defaultConnection);
         }
 
-        // НА Android используем только SQLite
-        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE");
+        // Загружаем сохраненные настройки
+        QSettings settings;
+        m_pgHost = settings.value("postgres/host", "localhost").toString();
+        m_pgPort = settings.value("postgres/port", 5432).toInt();
+        m_pgDatabase = settings.value("postgres/database", "mental_krisis_db").toString();
+        m_pgUser = settings.value("postgres/user", "postgres").toString();
+        m_pgPassword = settings.value("postgres/password", "postgres").toString();
 
-        // На Android используем специальный путь
+        // Определяем локальный IP для автонастройки
+        QString localIP = getLocalIP();
+        qDebug() << "Локальный IP:" << localIP;
+
+        // Сначала пробуем PostgreSQL
+        bool pgSuccess = tryPostgreSQL();
+
+        if (!pgSuccess) {
+            // Если PostgreSQL не удалось, пробуем SQLite
+            qDebug() << "Не удалось подключиться к PostgreSQL, пробуем SQLite...";
+            trySQLite();
+        }
+
+        emit connectionChanged(m_connected);
+    }
+
+    // Функция для получения локального IP адреса
+    QString getLocalIP() {
+        QString ipAddress;
+        QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
+
+        for (const QHostAddress &address : ipAddressesList) {
+            if (address != QHostAddress::LocalHost &&
+                address.toIPv4Address() &&
+                address.toString().startsWith("192.168.")) {
+                ipAddress = address.toString();
+                break;
+            }
+        }
+
+        if (ipAddress.isEmpty()) {
+            ipAddress = "localhost";
+        }
+
+        return ipAddress;
+    }
+
+    bool tryPostgreSQL() {
+        // Проверяем наличие драйвера PostgreSQL
+        if (!QSqlDatabase::isDriverAvailable("QPSQL")) {
+            qDebug() << "Драйвер PostgreSQL не доступен";
+            return false;
+        }
+
+        QSqlDatabase db = QSqlDatabase::addDatabase("QPSQL", "postgres_connection");
+
+        // ============ НАСТРОЙКА ПОДКЛЮЧЕНИЯ К POSTGRESQL ============
+        // ИЗМЕНИТЕ ЭТИ ПАРАМЕТРЫ ДЛЯ ПОДКЛЮЧЕНИЯ К ВАШЕМУ СЕРВЕРУ:
+        QString host = m_pgHost;           // IP адрес или хостнейм
+        int port = m_pgPort;               // Порт PostgreSQL (обычно 5432)
+        QString database = m_pgDatabase;   // Имя базы данных
+        QString user = m_pgUser;           // Имя пользователя
+        QString password = m_pgPassword;   // Пароль
+        // ============================================================
+
+        qDebug() << "Попытка подключения к PostgreSQL:";
+        qDebug() << "  Хост:" << host;
+        qDebug() << "  Порт:" << port;
+        qDebug() << "  База данных:" << database;
+        qDebug() << "  Пользователь:" << user;
+
+        db.setHostName(host);
+        db.setPort(port);
+        db.setDatabaseName(database);
+        db.setUserName(user);
+        db.setPassword(password);
+
+        // Настройка таймаутов для мобильных устройств
+        db.setConnectOptions("connect_timeout=10");
+
+        if (db.open()) {
+            qDebug() << "Успешное подключение к PostgreSQL!";
+
+            // Создаем таблицу если не существует
+            createPostgreSQLTables();
+
+            m_connected = true;
+            m_connectionType = "PostgreSQL";
+            return true;
+        } else {
+            QString error = db.lastError().text();
+            qWarning() << "Ошибка подключения к PostgreSQL:" << error;
+
+            // Пробуем создать базу данных если она не существует
+            if (error.contains("database") && error.contains("does not exist")) {
+                qDebug() << "База данных не существует, пытаемся создать...";
+                if (createPostgreSQLDatabase()) {
+                    if (db.open()) {
+                        createPostgreSQLTables();
+                        m_connected = true;
+                        m_connectionType = "PostgreSQL";
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+    }
+
+    bool createPostgreSQLDatabase() {
+        // Подключаемся к серверу PostgreSQL без выбора конкретной БД
+        QSqlDatabase tempDb = QSqlDatabase::addDatabase("QPSQL", "temp_postgres_connection");
+        tempDb.setHostName(m_pgHost);
+        tempDb.setPort(m_pgPort);
+        tempDb.setDatabaseName("postgres");  // Подключаемся к системной БД
+        tempDb.setUserName(m_pgUser);
+        tempDb.setPassword(m_pgPassword);
+
+        if (tempDb.open()) {
+            QSqlQuery query(tempDb);
+            QString createDbSQL = QString("CREATE DATABASE %1").arg(m_pgDatabase);
+
+            if (query.exec(createDbSQL)) {
+                qDebug() << "База данных успешно создана";
+                tempDb.close();
+                QSqlDatabase::removeDatabase("temp_postgres_connection");
+                return true;
+            } else {
+                qWarning() << "Не удалось создать базу данных:" << query.lastError().text();
+            }
+            tempDb.close();
+        } else {
+            qWarning() << "Не удалось подключиться к серверу PostgreSQL:" << tempDb.lastError().text();
+        }
+
+        QSqlDatabase::removeDatabase("temp_postgres_connection");
+        return false;
+    }
+
+    void createPostgreSQLTables() {
+        QSqlDatabase db = QSqlDatabase::database("postgres_connection");
+        QSqlQuery query(db);
+
+        QString sql =
+            "CREATE TABLE IF NOT EXISTS mental_records ("
+            "id SERIAL PRIMARY KEY,"
+            "record_time TIMESTAMP NOT NULL,"
+            "tab1_text TEXT,"
+            "tab2_text TEXT,"
+            "tab3_text TEXT,"
+            "tab4_value INTEGER,"
+            "tab5_text TEXT)";
+
+        if (!query.exec(sql)) {
+            qWarning() << "Ошибка создания таблицы в PostgreSQL:" << query.lastError().text();
+        } else {
+            qDebug() << "Таблица в PostgreSQL создана/уже существует";
+        }
+    }
+
+    void trySQLite() {
+        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", "sqlite_connection");
+
         QString dbPath;
 
 #ifdef Q_OS_ANDROID
         // На Android: внутреннее хранилище приложения
         dbPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/mental_krisis.db";
-        qDebug() << "Android database path:" << dbPath;
+        qDebug() << "Android SQLite database path:" << dbPath;
 #else
         // На десктопе: обычный путь
         QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
@@ -222,24 +425,25 @@ private:
             dir.mkpath(".");
         }
         dbPath = dataDir + "/mental_krisis.db";
+        qDebug() << "Desktop SQLite database path:" << dbPath;
 #endif
 
         db.setDatabaseName(dbPath);
 
         if (db.open()) {
-            qDebug() << "SQLite база данных:" << dbPath;
-            createTables();
+            qDebug() << "SQLite база данных открыта:" << dbPath;
+            createSQLiteTables();
             m_connected = true;
+            m_connectionType = "SQLite";
         } else {
             qWarning() << "Ошибка SQLite:" << db.lastError().text();
             m_connected = false;
         }
-
-        emit connectionChanged(m_connected);
     }
 
-    void createTables() {
-        QSqlQuery query;
+    void createSQLiteTables() {
+        QSqlDatabase db = QSqlDatabase::database("sqlite_connection");
+        QSqlQuery query(db);
 
         QString sql =
             "CREATE TABLE IF NOT EXISTS mental_records ("
@@ -259,6 +463,14 @@ private:
     }
 
     bool m_connected;
+    QString m_connectionType;
+
+    // Параметры подключения к PostgreSQL
+    QString m_pgHost;
+    int m_pgPort;
+    QString m_pgDatabase;
+    QString m_pgUser;
+    QString m_pgPassword;
 };
 
 #include "main.moc"
