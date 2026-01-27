@@ -5,7 +5,7 @@ project(Mental_krisis_app VERSION 0.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Находим необходимые компоненты Qt
-find_package(Qt6 REQUIRED COMPONENTS Quick Network Sql)
+find_package(Qt6 REQUIRED COMPONENTS Quick Network)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
@@ -22,39 +22,15 @@ qt_add_qml_module(appMental_krisis_app
         Main.qml
 )
 
-# Ищем PostgreSQL (только на десктопе)
-if(NOT ANDROID)
-    find_package(PostgreSQL)
-    if(PostgreSQL_FOUND)
-        message(STATUS "PostgreSQL found, linking...")
-        target_link_libraries(appMental_krisis_app
-            PRIVATE Qt6::Quick Qt6::Network Qt6::Sql
-            PostgreSQL::PostgreSQL
-        )
-    else()
-        message(WARNING "PostgreSQL not found. Will use SQLite only.")
-        target_link_libraries(appMental_krisis_app
-            PRIVATE Qt6::Quick Qt6::Network Qt6::Sql
-        )
-    endif()
-else()
-    # На Android используем только SQLite
-    message(STATUS "Android build - using SQLite only")
-    target_link_libraries(appMental_krisis_app
-        PRIVATE Qt6::Quick Qt6::Network Qt6::Sql
-    )
-endif()
+# Линкуем библиотеки
+target_link_libraries(appMental_krisis_app
+    PRIVATE Qt6::Quick Qt6::Network
+)
 
 # Настройки для Android
 if(ANDROID)
     # Минимальная версия Android
     set(CMAKE_MINIMUM_REQUIRED_VERSION 21)
-
-    # Добавляем разрешения Android
-    qt_add_android_apk(appMental_krisis_app
-        PACKAGE_NAME "org.qtproject.mental_krisis"
-        DEPENDS "appMental_krisis_app"
-    )
 
     # Настройки для сборки под Android
     set_target_properties(appMental_krisis_app PROPERTIES

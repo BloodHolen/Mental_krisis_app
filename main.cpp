@@ -1,32 +1,66 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
-#include <QSqlDatabase>
-#include <QSqlQuery>
-#include <QSqlError>
 #include <QDateTime>
 #include <QDebug>
-#include <QStandardPaths>
-#include <QDir>
-#include <QFile>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QCoreApplication>
 #include <QSettings>
-#include <QNetworkInterface>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QTimer>
+#include <QSslSocket>
+#include <QUrlQuery>
+#define IP_Server_define 127.0.0.1
 
-class DatabaseManager : public QObject {
+class NetworkManager : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool isConnected READ isConnected NOTIFY connectionChanged)
-    Q_PROPERTY(QString connectionType READ connectionType NOTIFY connectionChanged)
+    Q_PROPERTY(QString connectionStatus READ connectionStatus NOTIFY connectionChanged)
+    Q_PROPERTY(QString serverUrl READ serverUrl WRITE setServerUrl NOTIFY serverUrlChanged)
 
 public:
-    explicit DatabaseManager(QObject *parent = nullptr) : QObject(parent), m_connected(false) {
-        initDatabase();
+    explicit NetworkManager(QObject *parent = nullptr)
+        : QObject(parent),
+        m_connected(false),
+        m_networkManager(new QNetworkAccessManager(this)) {
+
+        // Загружаем сохраненный URL сервера
+        QSettings settings;
+        m_serverUrl = settings.value("server/url", "http://IP_Server_define:8080").toString();
+
+        // Проверяем соединение при старте
+        QTimer::singleShot(1000, this, &NetworkManager::checkConnection);
     }
 
+    ~NetworkManager() = default;
+
     bool isConnected() const { return m_connected; }
-    QString connectionType() const { return m_connectionType; }
+    QString connectionStatus() const {
+        return m_connected ?
+                   QString("✓ Подключено к %1").arg(m_serverUrl) :
+                   QString("✗ Нет подключения к серверу");
+    }
+
+    QString serverUrl() const { return m_serverUrl; }
+
+    void setServerUrl(const QString &url) {
+        if (m_serverUrl != url) {
+            m_serverUrl = url;
+
+            // Сохраняем настройки
+            QSettings settings;
+            settings.setValue("server/url", url);
+
+            emit serverUrlChanged(url);
+            checkConnection();
+        }
+    }
 
     Q_INVOKABLE bool saveRecord(const QDateTime &dateTime,
                                 const QString &tab1,
@@ -34,10 +68,6 @@ public:
                                 const QString &tab3,
                                 int tab4,
                                 const QString &tab5) {
-        if (!m_connected) {
-            qWarning() << "База данных не подключена";
-            return false;
-        }
 
         // Не сохраняем, если только дата/время
         if (tab1.isEmpty() && tab2.isEmpty() && tab3.isEmpty() &&
@@ -46,27 +76,35 @@ public:
             return true;
         }
 
-        QSqlQuery query;
-        query.prepare("INSERT INTO mental_records "
-                      "(record_time, tab1_text, tab2_text, tab3_text, tab4_value, tab5_text) "
-                      "VALUES (?, ?, ?, ?, ?, ?)");
+        QJsonObject record;
+        record["record_time"] = dateTime.toString(Qt::ISODate);
+        record["tab1_text"] = tab1;
+        record["tab2_text"] = tab2;
+        record["tab3_text"] = tab3;
+        record["tab4_value"] = tab4;
+        record["tab5_text"] = tab5;
 
-        query.addBindValue(dateTime);
-        query.addBindValue(tab1);
-        query.addBindValue(tab2);
-        query.addBindValue(tab3);
-        query.addBindValue(tab4);
-        query.addBindValue(tab5);
+        QJsonDocument doc(record);
+        QByteArray data = doc.toJson();
 
-        bool success = query.exec();
-        if (!success) {
-            qWarning() << "Ошибка сохранения:" << query.lastError().text();
-        } else {
-            qDebug() << "Запись успешно сохранена. ID:" << query.lastInsertId().toString();
-            emit recordSaved();
-        }
+        QNetworkRequest request(QUrl(m_serverUrl + "/records"));
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-        return success;
+        QNetworkReply *reply = m_networkManager->post(request, data);
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            if (reply->error() == QNetworkReply::NoError) {
+                qDebug() << "Запись успешно сохранена";
+                emit recordSaved();
+            } else {
+                QString error = reply->errorString();
+                qWarning() << "Ошибка сохранения:" << error;
+                emit errorOccurred(error);
+            }
+            reply->deleteLater();
+        });
+
+        return true; // Возвращаем true, так как запрос отправлен асинхронно
     }
 
     Q_INVOKABLE bool updateRecord(int id,
@@ -76,64 +114,69 @@ public:
                                   const QString &tab3,
                                   int tab4,
                                   const QString &tab5) {
-        if (!m_connected) {
-            qWarning() << "База данных не подключена";
-            return false;
-        }
 
-        QSqlQuery query;
-        query.prepare("UPDATE mental_records SET "
-                      "record_time = ?, "
-                      "tab1_text = ?, "
-                      "tab2_text = ?, "
-                      "tab3_text = ?, "
-                      "tab4_value = ?, "
-                      "tab5_text = ? "
-                      "WHERE id = ?");
+        QJsonObject record;
+        record["id"] = id;
+        record["record_time"] = dateTime.toString(Qt::ISODate);
+        record["tab1_text"] = tab1;
+        record["tab2_text"] = tab2;
+        record["tab3_text"] = tab3;
+        record["tab4_value"] = tab4;
+        record["tab5_text"] = tab5;
 
-        query.addBindValue(dateTime);
-        query.addBindValue(tab1);
-        query.addBindValue(tab2);
-        query.addBindValue(tab3);
-        query.addBindValue(tab4);
-        query.addBindValue(tab5);
-        query.addBindValue(id);
+        QJsonDocument doc(record);
+        QByteArray data = doc.toJson();
 
-        bool success = query.exec();
-        if (!success) {
-            qWarning() << "Ошибка обновления записи:" << query.lastError().text();
-        } else {
-            qDebug() << "Запись с ID" << id << "обновлена";
-            emit recordUpdated();
-        }
+        QNetworkRequest request(QUrl(m_serverUrl + "/records/" + QString::number(id)));
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-        return success;
+        QNetworkReply *reply = m_networkManager->put(request, data);
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply, id]() {
+            if (reply->error() == QNetworkReply::NoError) {
+                qDebug() << "Запись с ID" << id << "обновлена";
+                emit recordUpdated();
+            } else {
+                QString error = reply->errorString();
+                qWarning() << "Ошибка обновления записи:" << error;
+                emit errorOccurred(error);
+            }
+            reply->deleteLater();
+        });
+
+        return true;
     }
 
     Q_INVOKABLE QVariantMap getRecordById(int id) {
         QVariantMap record;
-        if (!m_connected) {
-            return record;
-        }
 
-        QSqlQuery query;
-        query.prepare("SELECT id, record_time, tab1_text, tab2_text, tab3_text, tab4_value, tab5_text "
-                      "FROM mental_records "
-                      "WHERE id = ?");
-        query.addBindValue(id);
+        // Создаем синхронный запрос (для простоты)
+        QNetworkRequest request(QUrl(m_serverUrl + "/records/" + QString::number(id)));
+        QNetworkReply *reply = m_networkManager->get(request);
 
-        if (query.exec() && query.next()) {
-            record["id"] = query.value("id").toInt();
-            record["record_time"] = query.value("record_time").toDateTime();
-            record["tab1_text"] = query.value("tab1_text").toString();
-            record["tab2_text"] = query.value("tab2_text").toString();
-            record["tab3_text"] = query.value("tab3_text").toString();
-            record["tab4_value"] = query.value("tab4_value").toInt();
-            record["tab5_text"] = query.value("tab5_text").toString();
+        QEventLoop loop;
+        connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+        loop.exec();
+
+        if (reply->error() == QNetworkReply::NoError) {
+            QByteArray response = reply->readAll();
+            QJsonDocument doc = QJsonDocument::fromJson(response);
+            QJsonObject obj = doc.object();
+
+            record["id"] = obj["id"].toInt();
+            record["record_time"] = QDateTime::fromString(obj["record_time"].toString(), Qt::ISODate);
+            record["tab1_text"] = obj["tab1_text"].toString();
+            record["tab2_text"] = obj["tab2_text"].toString();
+            record["tab3_text"] = obj["tab3_text"].toString();
+            record["tab4_value"] = obj["tab4_value"].toInt();
+            record["tab5_text"] = obj["tab5_text"].toString();
         } else {
-            qWarning() << "Ошибка при получении записи:" << query.lastError().text();
+            QString error = reply->errorString();
+            qWarning() << "Ошибка при получении записи:" << error;
+            emit errorOccurred(error);
         }
 
+        reply->deleteLater();
         return record;
     }
 
@@ -143,91 +186,93 @@ public:
 
     Q_INVOKABLE QVariantList getRecordsForDate(const QDateTime &dateTime) {
         QVariantList records;
-        if (!m_connected) {
-            return records;
-        }
 
-        QSqlQuery query;
-        // Для совместимости с PostgreSQL и SQLite
-        if (m_connectionType == "PostgreSQL") {
-            query.prepare("SELECT id, record_time, tab1_text, tab2_text, tab3_text, tab4_value, tab5_text "
-                          "FROM mental_records "
-                          "WHERE DATE(record_time) = DATE(?) "
-                          "ORDER BY record_time DESC");
-        } else {
-            query.prepare("SELECT id, record_time, tab1_text, tab2_text, tab3_text, tab4_value, tab5_text "
-                          "FROM mental_records "
-                          "WHERE DATE(record_time) = DATE(?) "
-                          "ORDER BY record_time DESC");
-        }
+        QString dateStr = dateTime.toString("yyyy-MM-dd");
+        QUrl url(m_serverUrl + "/records");
+        QUrlQuery query;
+        query.addQueryItem("date", dateStr);
+        url.setQuery(query);
 
-        query.addBindValue(dateTime);
+        QNetworkRequest request(url);
+        QNetworkReply *reply = m_networkManager->get(request);
 
-        if (query.exec()) {
-            while (query.next()) {
+        QEventLoop loop;
+        connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+        loop.exec();
+
+        if (reply->error() == QNetworkReply::NoError) {
+            QByteArray response = reply->readAll();
+            QJsonDocument doc = QJsonDocument::fromJson(response);
+            QJsonArray array = doc.array();
+
+            for (const QJsonValue &value : array) {
+                QJsonObject obj = value.toObject();
                 QVariantMap record;
-                record["id"] = query.value("id").toInt();
-                record["record_time"] = query.value("record_time").toDateTime();
-                record["tab1_text"] = query.value("tab1_text").toString();
-                record["tab2_text"] = query.value("tab2_text").toString();
-                record["tab3_text"] = query.value("tab3_text").toString();
-                record["tab4_value"] = query.value("tab4_value").toInt();
-                record["tab5_text"] = query.value("tab5_text").toString();
+                record["id"] = obj["id"].toInt();
+                record["record_time"] = QDateTime::fromString(obj["record_time"].toString(), Qt::ISODate);
+                record["tab1_text"] = obj["tab1_text"].toString();
+                record["tab2_text"] = obj["tab2_text"].toString();
+                record["tab3_text"] = obj["tab3_text"].toString();
+                record["tab4_value"] = obj["tab4_value"].toInt();
+                record["tab5_text"] = obj["tab5_text"].toString();
                 records.append(record);
             }
         } else {
-            qWarning() << "Ошибка при получении записей:" << query.lastError().text();
+            QString error = reply->errorString();
+            qWarning() << "Ошибка при получении записей:" << error;
+            emit errorOccurred(error);
         }
 
+        reply->deleteLater();
         return records;
     }
 
     Q_INVOKABLE bool deleteRecord(int recordId) {
-        if (!m_connected) {
-            return false;
-        }
+        QNetworkRequest request(QUrl(m_serverUrl + "/records/" + QString::number(recordId)));
+        QNetworkReply *reply = m_networkManager->deleteResource(request);
 
-        QSqlQuery query;
-        query.prepare("DELETE FROM mental_records WHERE id = ?");
-        query.addBindValue(recordId);
+        connect(reply, &QNetworkReply::finished, this, [this, reply, recordId]() {
+            if (reply->error() == QNetworkReply::NoError) {
+                qDebug() << "Запись с ID" << recordId << "удалена";
+                emit recordDeleted();
+            } else {
+                QString error = reply->errorString();
+                qWarning() << "Ошибка удаления записи:" << error;
+                emit errorOccurred(error);
+            }
+            reply->deleteLater();
+        });
 
-        bool success = query.exec();
-        if (!success) {
-            qWarning() << "Ошибка удаления записи:" << query.lastError().text();
-        } else {
-            qDebug() << "Запись с ID" << recordId << "удалена";
-            emit recordDeleted();
-        }
-
-        return success;
-    }
-
-    // Метод для изменения настроек подключения к PostgreSQL
-    Q_INVOKABLE void setConnectionParams(const QString &host, int port,
-                                         const QString &database, const QString &user,
-                                         const QString &password) {
-        m_pgHost = host;
-        m_pgPort = port;
-        m_pgDatabase = database;
-        m_pgUser = user;
-        m_pgPassword = password;
-
-        // Сохраняем настройки
-        QSettings settings;
-        settings.setValue("postgres/host", host);
-        settings.setValue("postgres/port", port);
-        settings.setValue("postgres/database", database);
-        settings.setValue("postgres/user", user);
-        settings.setValue("postgres/password", password);
-
-        // Переподключаемся
-        reconnect();
+        return true;
     }
 
     Q_INVOKABLE void reconnect() {
-        m_connected = false;
-        emit connectionChanged(m_connected);
-        initDatabase();
+        checkConnection();
+    }
+
+    Q_INVOKABLE void testConnection(const QString &url) {
+        QString testUrl = url.isEmpty() ? m_serverUrl : url;
+
+        QNetworkRequest request(QUrl(testUrl + "/health"));
+        QNetworkReply *reply = m_networkManager->get(request);
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply, testUrl]() {
+            if (reply->error() == QNetworkReply::NoError) {
+                emit connectionTested(true, QString("Подключение к %1 успешно").arg(testUrl));
+                if (testUrl != m_serverUrl) {
+                    setServerUrl(testUrl);
+                }
+            } else {
+                QString error = reply->errorString();
+                emit connectionTested(false, QString("Ошибка подключения к %1: %2").arg(testUrl).arg(error));
+            }
+            reply->deleteLater();
+        });
+    }
+
+    // Метод для проверки локальной сети
+    Q_INVOKABLE QString getLocalIP() {
+        return "IP_Server_define"; // Замените на реальный IP вашего сервера
     }
 
 signals:
@@ -235,242 +280,31 @@ signals:
     void recordSaved();
     void recordUpdated();
     void recordDeleted();
+    void errorOccurred(const QString &error);
+    void connectionTested(bool success, const QString &message);
+    void serverUrlChanged(const QString &url);
+
+private slots:
+    void checkConnection() {
+        QNetworkRequest request(QUrl(m_serverUrl + "/health"));
+        QNetworkReply *reply = m_networkManager->get(request);
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            bool wasConnected = m_connected;
+            m_connected = (reply->error() == QNetworkReply::NoError);
+
+            if (wasConnected != m_connected) {
+                emit connectionChanged(m_connected);
+            }
+
+            reply->deleteLater();
+        });
+    }
 
 private:
-    void initDatabase() {
-        qDebug() << "Доступные драйверы БД:" << QSqlDatabase::drivers();
-
-        // Закрываем старое соединение
-        if (QSqlDatabase::contains()) {
-            QSqlDatabase db = QSqlDatabase::database();
-            if (db.isOpen()) {
-                db.close();
-            }
-            QSqlDatabase::removeDatabase(QSqlDatabase::defaultConnection);
-        }
-
-        // Загружаем сохраненные настройки
-        QSettings settings;
-        m_pgHost = settings.value("postgres/host", "localhost").toString();
-        m_pgPort = settings.value("postgres/port", 5432).toInt();
-        m_pgDatabase = settings.value("postgres/database", "mental_krisis_db").toString();
-        m_pgUser = settings.value("postgres/user", "postgres").toString();
-        m_pgPassword = settings.value("postgres/password", "postgres").toString();
-
-        // Определяем локальный IP для автонастройки
-        QString localIP = getLocalIP();
-        qDebug() << "Локальный IP:" << localIP;
-
-        // Сначала пробуем PostgreSQL
-        bool pgSuccess = tryPostgreSQL();
-
-        if (!pgSuccess) {
-            // Если PostgreSQL не удалось, пробуем SQLite
-            qDebug() << "Не удалось подключиться к PostgreSQL, пробуем SQLite...";
-            trySQLite();
-        }
-
-        emit connectionChanged(m_connected);
-    }
-
-    // Функция для получения локального IP адреса
-    QString getLocalIP() {
-        QString ipAddress;
-        QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
-
-        for (const QHostAddress &address : ipAddressesList) {
-            if (address != QHostAddress::LocalHost &&
-                address.toIPv4Address() &&
-                address.toString().startsWith("192.168.")) {
-                ipAddress = address.toString();
-                break;
-            }
-        }
-
-        if (ipAddress.isEmpty()) {
-            ipAddress = "localhost";
-        }
-
-        return ipAddress;
-    }
-
-    bool tryPostgreSQL() {
-        // Проверяем наличие драйвера PostgreSQL
-        if (!QSqlDatabase::isDriverAvailable("QPSQL")) {
-            qDebug() << "Драйвер PostgreSQL не доступен";
-            return false;
-        }
-
-        QSqlDatabase db = QSqlDatabase::addDatabase("QPSQL", "postgres_connection");
-
-        // ============ НАСТРОЙКА ПОДКЛЮЧЕНИЯ К POSTGRESQL ============
-        // ИЗМЕНИТЕ ЭТИ ПАРАМЕТРЫ ДЛЯ ПОДКЛЮЧЕНИЯ К ВАШЕМУ СЕРВЕРУ:
-        QString host = m_pgHost;           // IP адрес или хостнейм
-        int port = m_pgPort;               // Порт PostgreSQL (обычно 5432)
-        QString database = m_pgDatabase;   // Имя базы данных
-        QString user = m_pgUser;           // Имя пользователя
-        QString password = m_pgPassword;   // Пароль
-        // ============================================================
-
-        qDebug() << "Попытка подключения к PostgreSQL:";
-        qDebug() << "  Хост:" << host;
-        qDebug() << "  Порт:" << port;
-        qDebug() << "  База данных:" << database;
-        qDebug() << "  Пользователь:" << user;
-
-        db.setHostName(host);
-        db.setPort(port);
-        db.setDatabaseName(database);
-        db.setUserName(user);
-        db.setPassword(password);
-
-        // Настройка таймаутов для мобильных устройств
-        db.setConnectOptions("connect_timeout=10");
-
-        if (db.open()) {
-            qDebug() << "Успешное подключение к PostgreSQL!";
-
-            // Создаем таблицу если не существует
-            createPostgreSQLTables();
-
-            m_connected = true;
-            m_connectionType = "PostgreSQL";
-            return true;
-        } else {
-            QString error = db.lastError().text();
-            qWarning() << "Ошибка подключения к PostgreSQL:" << error;
-
-            // Пробуем создать базу данных если она не существует
-            if (error.contains("database") && error.contains("does not exist")) {
-                qDebug() << "База данных не существует, пытаемся создать...";
-                if (createPostgreSQLDatabase()) {
-                    if (db.open()) {
-                        createPostgreSQLTables();
-                        m_connected = true;
-                        m_connectionType = "PostgreSQL";
-                        return true;
-                    }
-                }
-            }
-
-            return false;
-        }
-    }
-
-    bool createPostgreSQLDatabase() {
-        // Подключаемся к серверу PostgreSQL без выбора конкретной БД
-        QSqlDatabase tempDb = QSqlDatabase::addDatabase("QPSQL", "temp_postgres_connection");
-        tempDb.setHostName(m_pgHost);
-        tempDb.setPort(m_pgPort);
-        tempDb.setDatabaseName("postgres");  // Подключаемся к системной БД
-        tempDb.setUserName(m_pgUser);
-        tempDb.setPassword(m_pgPassword);
-
-        if (tempDb.open()) {
-            QSqlQuery query(tempDb);
-            QString createDbSQL = QString("CREATE DATABASE %1").arg(m_pgDatabase);
-
-            if (query.exec(createDbSQL)) {
-                qDebug() << "База данных успешно создана";
-                tempDb.close();
-                QSqlDatabase::removeDatabase("temp_postgres_connection");
-                return true;
-            } else {
-                qWarning() << "Не удалось создать базу данных:" << query.lastError().text();
-            }
-            tempDb.close();
-        } else {
-            qWarning() << "Не удалось подключиться к серверу PostgreSQL:" << tempDb.lastError().text();
-        }
-
-        QSqlDatabase::removeDatabase("temp_postgres_connection");
-        return false;
-    }
-
-    void createPostgreSQLTables() {
-        QSqlDatabase db = QSqlDatabase::database("postgres_connection");
-        QSqlQuery query(db);
-
-        QString sql =
-            "CREATE TABLE IF NOT EXISTS mental_records ("
-            "id SERIAL PRIMARY KEY,"
-            "record_time TIMESTAMP NOT NULL,"
-            "tab1_text TEXT,"
-            "tab2_text TEXT,"
-            "tab3_text TEXT,"
-            "tab4_value INTEGER,"
-            "tab5_text TEXT)";
-
-        if (!query.exec(sql)) {
-            qWarning() << "Ошибка создания таблицы в PostgreSQL:" << query.lastError().text();
-        } else {
-            qDebug() << "Таблица в PostgreSQL создана/уже существует";
-        }
-    }
-
-    void trySQLite() {
-        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", "sqlite_connection");
-
-        QString dbPath;
-
-#ifdef Q_OS_ANDROID
-        // На Android: внутреннее хранилище приложения
-        dbPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/mental_krisis.db";
-        qDebug() << "Android SQLite database path:" << dbPath;
-#else
-        // На десктопе: обычный путь
-        QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-        QDir dir(dataDir);
-        if (!dir.exists()) {
-            dir.mkpath(".");
-        }
-        dbPath = dataDir + "/mental_krisis.db";
-        qDebug() << "Desktop SQLite database path:" << dbPath;
-#endif
-
-        db.setDatabaseName(dbPath);
-
-        if (db.open()) {
-            qDebug() << "SQLite база данных открыта:" << dbPath;
-            createSQLiteTables();
-            m_connected = true;
-            m_connectionType = "SQLite";
-        } else {
-            qWarning() << "Ошибка SQLite:" << db.lastError().text();
-            m_connected = false;
-        }
-    }
-
-    void createSQLiteTables() {
-        QSqlDatabase db = QSqlDatabase::database("sqlite_connection");
-        QSqlQuery query(db);
-
-        QString sql =
-            "CREATE TABLE IF NOT EXISTS mental_records ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "record_time DATETIME NOT NULL,"
-            "tab1_text TEXT,"
-            "tab2_text TEXT,"
-            "tab3_text TEXT,"
-            "tab4_value INTEGER,"
-            "tab5_text TEXT)";
-
-        if (!query.exec(sql)) {
-            qWarning() << "Ошибка создания таблицы в SQLite:" << query.lastError().text();
-        } else {
-            qDebug() << "Таблица в SQLite создана/уже существует";
-        }
-    }
-
     bool m_connected;
-    QString m_connectionType;
-
-    // Параметры подключения к PostgreSQL
-    QString m_pgHost;
-    int m_pgPort;
-    QString m_pgDatabase;
-    QString m_pgUser;
-    QString m_pgPassword;
+    QString m_serverUrl;
+    QNetworkAccessManager *m_networkManager;
 };
 
 #include "main.moc"
@@ -480,14 +314,14 @@ int main(int argc, char *argv[]) {
     app.setOrganizationName("MentalKrisis");
     app.setApplicationName("MentalKrisisApp");
 
-    qDebug() << "Запуск приложения...";
+    qDebug() << "=== Запуск клиентского приложения Mental Krisis ===";
+    qDebug() << "Платформа:" << QSysInfo::productType();
 
-    DatabaseManager dbManager;
+    NetworkManager networkManager;
 
     QQmlApplicationEngine engine;
-    engine.rootContext()->setContextProperty("database", &dbManager);
+    engine.rootContext()->setContextProperty("network", &networkManager);
 
-    // На Android всегда используем ресурсы
     const QUrl url(QStringLiteral("qrc:/qt/qml/Mental_krisis_app/Main.qml"));
 
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
@@ -500,21 +334,11 @@ int main(int argc, char *argv[]) {
 
     if (engine.rootObjects().isEmpty()) {
         qCritical() << "Не удалось загрузить QML файл:" << url.toString();
-
-        // Пробуем альтернативный путь на Android
-#ifdef Q_OS_ANDROID
-        const QUrl altUrl(QStringLiteral("qrc:/Main.qml"));
-        engine.load(altUrl);
-
-        if (engine.rootObjects().isEmpty()) {
-            qCritical() << "Не удалось загрузить QML файл и по альтернативному пути";
-            return -1;
-        }
-#else
         return -1;
-#endif
     }
 
-    qDebug() << "QML успешно загружен из:" << url.toString();
+    qDebug() << "✓ QML успешно загружен";
+    qDebug() << "✓ Клиентское приложение запущено";
+
     return app.exec();
 }

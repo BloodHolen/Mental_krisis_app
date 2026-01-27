@@ -9,9 +9,10 @@ ApplicationWindow {
     height: 640
     visible: true
     title: "Mental Krisis App"
+    flags: Qt.Window | Qt.MaximizeUsingFullscreenGeometryHint
 
-    // Данные для текущей записи
-    property date currentDateTime: database.currentDateTime()
+    // Свойства для текущей записи
+    property date currentDateTime: network.currentDateTime()
     property string tab1Text: ""
     property string tab2Text: ""
     property string tab3Text: ""
@@ -25,6 +26,9 @@ ApplicationWindow {
 
     // Список записей за текущую дату
     property var recordsList: []
+
+    // Флаг отображения настроек
+    property bool showSettings: false
 
     // Функция для форматирования даты
     function formatDate(date) {
@@ -51,12 +55,12 @@ ApplicationWindow {
 
     // Функция обновления списка записей
     function updateRecords() {
-        recordsList = database.getRecordsForDate(currentDateTime);
+        recordsList = network.getRecordsForDate(currentDateTime);
     }
 
     // Функция загрузки записи в форму
     function loadRecord(recordId) {
-        var record = database.getRecordById(recordId);
+        var record = network.getRecordById(recordId);
         if (record && record.id) {
             currentRecordId = record.id;
             currentDateTime = record.record_time;
@@ -67,7 +71,6 @@ ApplicationWindow {
             tab5Text = record.tab5_text || "";
             isEditMode = true;
 
-            // Обновляем UI элементы
             tab1TextArea.text = tab1Text;
             tab2TextArea.text = tab2Text;
             tab3TextArea.text = tab3Text;
@@ -75,7 +78,6 @@ ApplicationWindow {
             tab4SpinBox.value = tab4Value;
             tab5TextArea.text = tab5Text;
 
-            // Переключаемся на вторую вкладку (Текст 1)
             currentTabIndex = 1;
         }
     }
@@ -83,7 +85,7 @@ ApplicationWindow {
     // Функция сброса формы
     function resetForm() {
         currentRecordId = 0;
-        currentDateTime = database.currentDateTime();
+        currentDateTime = network.currentDateTime();
         tab1Text = "";
         tab2Text = "";
         tab3Text = "";
@@ -110,7 +112,7 @@ ApplicationWindow {
         return summary.trim() || "Только время";
     }
 
-    // Верхняя панель с вкладками (компактная)
+    // Верхняя панель с вкладками
     Row {
         id: tabBar
         anchors.top: parent.top
@@ -179,7 +181,7 @@ ApplicationWindow {
             }
         }
 
-        // Вкладка 3: Число (синий)
+        // Вкладка 3: Число
         Rectangle {
             width: parent.width/5
             height: parent.height
@@ -199,7 +201,7 @@ ApplicationWindow {
             }
         }
 
-        // Вкладка 4: Текст 3 (фиолетовый)
+        // Вкладка 4: Текст 3
         Rectangle {
             width: parent.width/5
             height: parent.height
@@ -231,7 +233,7 @@ ApplicationWindow {
 
         // Вкладка 0: Список записей
         Item {
-            visible: currentTabIndex === 0
+            visible: currentTabIndex === 0 && !showSettings
             anchors.fill: parent
 
             ColumnLayout {
@@ -279,7 +281,7 @@ ApplicationWindow {
                                 height: 25
                                 font.pixelSize: 10
                                 onClicked: {
-                                    currentDateTime = database.currentDateTime();
+                                    currentDateTime = network.currentDateTime();
                                 }
                             }
 
@@ -379,6 +381,48 @@ ApplicationWindow {
                     }
                 }
 
+                // Информация о подключении
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 50
+                    color: network.isConnected ? "#E8F5E9" : "#FFEBEE"
+                    border.width: 1
+                    border.color: network.isConnected ? "#4CAF50" : "#F44336"
+                    radius: 5
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 5
+
+                        Text {
+                            text: network.connectionStatus
+                            font.pixelSize: 12
+                            color: network.isConnected ? "#4CAF50" : "#F44336"
+                        }
+
+                        RowLayout {
+                            Button {
+                                text: "Обновить"
+                                Layout.preferredWidth: 70
+                                Layout.preferredHeight: 25
+                                font.pixelSize: 10
+                                onClicked: network.reconnect()
+                            }
+
+                            Button {
+                                text: "Настройки"
+                                Layout.preferredWidth: 70
+                                Layout.preferredHeight: 25
+                                font.pixelSize: 10
+                                onClicked: {
+                                    settingsUrl.text = network.serverUrl;
+                                    showSettings = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Список записей
                 Rectangle {
                     Layout.fillWidth: true
@@ -446,9 +490,7 @@ ApplicationWindow {
                                                 Layout.preferredWidth: 35
                                                 Layout.preferredHeight: 35
                                                 font.pixelSize: 14
-                                                onClicked: {
-                                                    loadRecord(modelData.id);
-                                                }
+                                                onClicked: loadRecord(modelData.id)
                                             }
 
                                             Button {
@@ -487,9 +529,9 @@ ApplicationWindow {
             }
         }
 
-        // Вкладка 1: Текст 1 (полный экран)
+        // Вкладка 1: Текст 1
         Item {
-            visible: currentTabIndex === 1
+            visible: currentTabIndex === 1 && !showSettings
             anchors.fill: parent
 
             ColumnLayout {
@@ -516,9 +558,9 @@ ApplicationWindow {
             }
         }
 
-        // Вкладка 2: Текст 2 (полный экран)
+        // Вкладка 2: Текст 2
         Item {
-            visible: currentTabIndex === 2
+            visible: currentTabIndex === 2 && !showSettings
             anchors.fill: parent
 
             ColumnLayout {
@@ -545,9 +587,9 @@ ApplicationWindow {
             }
         }
 
-        // Вкладка 3: Число (полный экран)
+        // Вкладка 3: Число
         Item {
-            visible: currentTabIndex === 3
+            visible: currentTabIndex === 3 && !showSettings
             anchors.fill: parent
 
             ColumnLayout {
@@ -615,9 +657,9 @@ ApplicationWindow {
             }
         }
 
-        // Вкладка 4: Текст 3 (полный экран)
+        // Вкладка 4: Текст 3
         Item {
-            visible: currentTabIndex === 4
+            visible: currentTabIndex === 4 && !showSettings
             anchors.fill: parent
 
             ColumnLayout {
@@ -640,6 +682,108 @@ ApplicationWindow {
                     wrapMode: TextArea.Wrap
                     font.pixelSize: 14
                     onTextChanged: tab5Text = text
+                }
+            }
+        }
+
+        // Окно настроек подключения
+        Rectangle {
+            visible: showSettings
+            anchors.fill: parent
+            color: "#FFFFFF"
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 10
+
+                Text {
+                    text: "Настройки сервера"
+                    font.bold: true
+                    font.pixelSize: 16
+                    color: "#1976D2"
+                    Layout.alignment: Qt.AlignHCenter
+                }
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 2
+                    columnSpacing: 10
+                    rowSpacing: 5
+
+                    Text { text: "URL сервера:"; Layout.alignment: Qt.AlignRight }
+                    TextField {
+                        id: settingsUrl
+                        Layout.fillWidth: true
+                        placeholderText: "http://192.168.1.100:8080"
+                        font.pixelSize: 14
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    Button {
+                        text: "Тест подключения"
+                        Layout.fillWidth: true
+                        onClicked: {
+                            network.testConnection(settingsUrl.text);
+                        }
+                    }
+
+                    Button {
+                        text: "Сохранить"
+                        Layout.fillWidth: true
+                        background: Rectangle {
+                            color: "#4CAF50"
+                            radius: 5
+                        }
+                        contentItem: Text {
+                            text: "Сохранить"
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            font.bold: true
+                        }
+                        onClicked: {
+                            network.serverUrl = settingsUrl.text;
+                            showSettings = false;
+                        }
+                    }
+                }
+
+                Button {
+                    text: "Отмена"
+                    Layout.fillWidth: true
+                    onClicked: showSettings = false
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    color: "#F5F5F5"
+                    border.width: 1
+                    border.color: "#E0E0E0"
+                    radius: 5
+
+                    ScrollView {
+                        anchors.fill: parent
+                        anchors.margins: 5
+
+                        Text {
+                            width: parent.width
+                            text: "Инструкция:\n\n" +
+                                  "1. Убедитесь, что сервер Go запущен\n" +
+                                  "2. По умолчанию используется URL:\n" +
+                                  "   http://192.168.1.100:8080\n\n" +
+                                  "Для изменения адреса укажите новый URL\n" +
+                                  "в формате: http://IP:ПОРТ"
+                            font.pixelSize: 12
+                            color: "#666"
+                            wrapMode: Text.WordWrap
+                        }
+                    }
                 }
             }
         }
@@ -741,7 +885,7 @@ ApplicationWindow {
                     onClicked: {
                         var success;
                         if (isEditMode) {
-                            success = database.updateRecord(currentRecordId, currentDateTime,
+                            success = network.updateRecord(currentRecordId, currentDateTime,
                                                            tab1Text, tab2Text, tab3Text,
                                                            tab4Value, tab5Text);
                             if (success) {
@@ -753,7 +897,7 @@ ApplicationWindow {
                                 saveIndicator.color = "#F44336";
                             }
                         } else {
-                            success = database.saveRecord(currentDateTime,
+                            success = network.saveRecord(currentDateTime,
                                                          tab1Text, tab2Text, tab3Text,
                                                          tab4Value, tab5Text);
                             if (success) {
@@ -786,25 +930,19 @@ ApplicationWindow {
         Timer {
             id: saveIndicatorTimer
             interval: 2000
-            onTriggered: {
-                saveIndicator.text = "";
-            }
+            onTriggered: saveIndicator.text = ""
         }
 
         Timer {
             id: clearIndicatorTimer
             interval: 1000
-            onTriggered: {
-                saveIndicator.text = "";
-            }
+            onTriggered: saveIndicator.text = ""
         }
 
         Timer {
             id: newIndicatorTimer
             interval: 1000
-            onTriggered: {
-                saveIndicator.text = "";
-            }
+            onTriggered: saveIndicator.text = ""
         }
     }
 
@@ -851,7 +989,7 @@ ApplicationWindow {
                         verticalAlignment: Text.AlignVCenter
                     }
                     onClicked: {
-                        if (database.deleteRecord(deleteDialog.recordId)) {
+                        if (network.deleteRecord(deleteDialog.recordId)) {
                             updateRecords();
                             if (currentRecordId === deleteDialog.recordId) {
                                 resetForm();
@@ -864,21 +1002,60 @@ ApplicationWindow {
         }
     }
 
-    // Обновляем поля при изменении даты/времени
-    onCurrentDateTimeChanged: {
-        updateRecords();
+    // Диалог сообщений
+    Dialog {
+        id: messageDialog
+        title: "Сообщение"
+        anchors.centerIn: parent
+        width: 300
+        height: 150
+        modal: true
+
+        property string message: ""
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+
+            Text {
+                text: messageDialog.message
+                font.pixelSize: 14
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+            }
+
+            Button {
+                text: "OK"
+                Layout.fillWidth: true
+                onClicked: messageDialog.close()
+            }
+        }
     }
 
-    // Обновляем список записей при сохранении, обновлении или удалении
+    // Обновление при изменении даты/времени
+    onCurrentDateTimeChanged: updateRecords()
+
+    // Подключение сигналов от базы данных
     Connections {
-        target: database
+        target: network
         onRecordSaved: updateRecords()
         onRecordUpdated: updateRecords()
         onRecordDeleted: updateRecords()
+        onErrorOccurred: {
+            messageDialog.message = error;
+            messageDialog.open();
+        }
+        onConnectionTested: {
+            messageDialog.message = message;
+            messageDialog.open();
+        }
     }
 
     // Инициализация при загрузке
     Component.onCompleted: {
         updateRecords();
+        console.log("Приложение запущено");
+        console.log("URL сервера:", network.serverUrl);
     }
 }
